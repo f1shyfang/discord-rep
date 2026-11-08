@@ -2,11 +2,26 @@
 
 A fullstack starter adapted from [Anh Dao's Next.js guidelines](https://github.com/zitianqin/anh-dao-2024-nextjs-guidelines), built upon Nam Dao's original work. Original attribution and the Pages Router, TypeScript, Tailwind, tRPC, Zod, and Jest architecture are retained.
 
-This copy uses **Clerk** for authentication, **Drizzle ORM** for database access, **Neon Postgres** for storage, and **Doppler** for secrets. It uses patched Next.js 15.5, React 18, and the current Clerk Core 3 SDK (`@clerk/nextjs` 7), while retaining the source's Pages Router architecture.
+This copy uses **Clerk** for authentication, **Drizzle ORM** for database access, **Neon Postgres** for storage, and **Doppler** for secrets. It uses Next.js 16 LTS, Node.js 26 LTS, stable React 19, TypeScript 7, and the Clerk Core 3 SDK, while retaining the source's Pages Router architecture.
+
+## Versions and compatibility
+
+| Component | Version |
+| --- | --- |
+| Next.js | 16.4.5 (Active LTS line) |
+| Node.js | 26.13.0 LTS |
+| React / React DOM | 19.3.1 stable |
+| TypeScript compiler | 7.0.2 stable |
+
+`.nvmrc` pins Node 26.13.0 and CI reads that file. The engine range accepts Node 26.13.0 through the rest of Node 26. React and React DOM use the same exact version.
+
+TypeScript 7's native compiler is installed as `@typescript/native` using an npm alias. Its executable is still `tsc`, so `npm run typecheck` and Next.js's default CLI checker use TypeScript 7. ESLint and other tools that need the older JavaScript compiler API resolve `typescript` to Microsoft's `@typescript/typescript6` compatibility package (which provides `tsc6`). This follows [Microsoft's side-by-side setup](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6.0). Next.js uses its [project-local CLI type checker](https://nextjs.org/docs/app/api-reference/config/typescript#using-typescript-7); type errors are not skipped.
+
+Next.js 16 uses Turbopack for development and production builds and `src/proxy.ts` for Clerk request authentication. ESLint uses flat configuration in `eslint.config.mjs`; builds run lint explicitly because Next.js 16 no longer runs it automatically. Jest configuration uses JavaScript ESM so it does not depend on `ts-node` or the TypeScript compiler API.
 
 ## Quick start
 
-1. Install Node.js 22 (`nvm install && nvm use`) and run `npm ci`.
+1. Install Node.js 26.13.0 LTS (`nvm install && nvm use`) and run `npm ci`.
 2. Create a Clerk application in the [Clerk Dashboard](https://dashboard.clerk.com). Enable your preferred sign-in methods there, including Google if needed. Copy the development publishable key and secret key into Doppler as described below. OAuth credentials are configured in Clerk, not in this app.
 3. Create a [Neon project](https://console.neon.tech) and a development branch. Copy its pooled connection URL into `DATABASE_URL` and its direct connection URL into `DIRECT_DATABASE_URL`. Both use PostgreSQL with `sslmode=require`.
 4. Install the [Doppler CLI](https://docs.doppler.com/docs/cli), log in with `doppler login`, and create a project named `lyrainspiredfullstacktemp` with a `dev` config. If using a different project/config, update `doppler.yaml`.
@@ -38,7 +53,7 @@ The standard `dev`, `build`, and `start` commands also work when a hosting platf
 - **API layer:** `src/pages/api` and `src/server/api` handle transport, authentication, authorization, and Zod validation. Public tRPC procedures remain public; protected procedures reject requests without a verified Clerk user ID.
 - **Service layer:** `src/libs/user/userJobHelper.ts` owns job operations and depends on a small repository interface. Inject repositories to test service behavior independently of the ORM.
 - **Data layer:** `DrizzleJobRepository` implements persistence. `src/server/db/schema.ts` defines posts and jobs; `src/server/db.ts` connects Drizzle to Neon over HTTP. Use a WebSocket or PostgreSQL driver if future features require interactive transactions.
-- **Authentication:** `src/middleware.ts` establishes Clerk request authentication; `_app.tsx` provides Clerk's client context. Users and sessions live in Clerk. Records store Clerk user IDs; the database has no local user/session tables or foreign keys to Clerk. Add verified webhooks if you later need user profile synchronization or deletion cleanup.
+- **Authentication:** `src/proxy.ts` establishes Clerk request authentication; `_app.tsx` provides Clerk's client context. Users and sessions live in Clerk. Records store Clerk user IDs; the database has no local user/session tables or foreign keys to Clerk. Add verified webhooks if you later need user profile synchronization or deletion cleanup.
 - **Ownership:** Derive user IDs from verified server authentication, never client input. Scope reads and writes to that ID. Public access to the home and jobs pages does not grant access to protected tRPC procedures.
 - **Secrets:** Store separate development, staging, and production values in Doppler. `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is intentionally browser-visible and must be available at build time; all other listed variables stay server-side. Never add a `NEXT_PUBLIC_` prefix to secrets or log credentials.
 - **Errors:** Propagate database failures through tRPC so clients can display errors; do not hide them behind successful empty results.
@@ -60,7 +75,7 @@ For another host, inject a scoped Doppler service token through that platform's 
 
 ## Dependency maintenance
 
-The source framework was upgraded to Next.js 15.5.29 to remove critical framework advisories, and nonbreaking dependency fixes were applied. The dependency audit still reports low, moderate, and high advisories in the retained toolchain and transitive packages (including Zod, PostCSS, ESLint, Jest, and Drizzle Kit). Run `npm audit` when adopting this starter; resolving the remaining findings requires a separate dependency review. No critical findings remained at the time of this migration.
+The framework and runtime were upgraded to Next.js 16.4.5 and Node.js 26.13.0, with stable React and TypeScript compilers. The dependency audit still reports low, moderate, and high advisories in the retained toolchain and transitive packages (including Zod, Jest, and Drizzle Kit). Run `npm audit` when adopting this starter; resolving the remaining findings requires a separate dependency review. No critical findings remained at the time of this migration.
 
 ## References
 

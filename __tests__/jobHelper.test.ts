@@ -1,8 +1,10 @@
 import { UserJobHelper, type JobRepository } from "~/libs/user/userJobHelper";
-import { mock } from "jest-mock-extended";
 
 describe("UserJobHelper", () => {
-  const repository = mock<JobRepository>();
+  const repository: jest.Mocked<JobRepository> = {
+    insert: jest.fn(),
+    findByUserId: jest.fn(),
+  };
   const helper = new UserJobHelper(repository);
   beforeEach(() => jest.clearAllMocks());
 
