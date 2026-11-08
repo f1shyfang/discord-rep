@@ -2,7 +2,7 @@
 
 A fullstack starter adapted from [Anh Dao's Next.js guidelines](https://github.com/zitianqin/anh-dao-2024-nextjs-guidelines), built upon Nam Dao's original work. Original attribution and the Pages Router, TypeScript, Tailwind, tRPC, and Zod architecture are retained; tests now use Vitest.
 
-This copy uses **Clerk** for authentication, **Drizzle ORM** for database access, **Neon Postgres** for storage, and **Doppler** for secrets. It uses Next.js 16 LTS, Node.js 26 LTS, stable React 19, TypeScript 7, and the Clerk Core 3 SDK, while retaining the source's Pages Router architecture.
+This copy uses **Clerk** for authentication, **Drizzle ORM** for database access, **Neon Postgres** for relational data, **Cloudflare R2** for private S3-compatible file storage, and **Doppler** for secrets. It uses Next.js 16 LTS, Node.js 26 LTS, stable React 19, TypeScript 7, and the Clerk Core 3 SDK, while retaining the source's Pages Router architecture.
 
 ## Versions and compatibility
 
@@ -25,11 +25,11 @@ Next.js 16 uses Turbopack for development and production builds and `src/proxy.t
 2. Create a Clerk application in the [Clerk Dashboard](https://dashboard.clerk.com). Enable your preferred sign-in methods there, including Google if needed. Copy the development publishable key and secret key into Doppler as described below. OAuth credentials are configured in Clerk, not in this app.
 3. Create a [Neon project](https://console.neon.tech) and a development branch. Copy its pooled connection URL into `DATABASE_URL` and its direct connection URL into `DIRECT_DATABASE_URL`. Both use PostgreSQL with `sslmode=require`.
 4. Install the [Doppler CLI](https://docs.doppler.com/docs/cli), log in with `doppler login`, and create a project named `lyrainspiredfullstacktemp` with a `dev` config. If using a different project/config, update `doppler.yaml`.
-5. In the Doppler dashboard, add the four variables listed in `.env.example`. That file contains placeholders only. Run `doppler setup` in this directory to select the project/config.
+5. In the Doppler dashboard, add the Clerk and database variables listed in `.env.example`. Add the optional R2 variables when enabling file storage (see below). That file contains placeholders only. Run `doppler setup` in this directory to select the project/config.
 6. Run `npm run db:migrate` to apply the committed Drizzle migration to your development database.
 7. Run `npm run dev:secrets` and open [localhost:3000](http://localhost:3000). Sign up, then open `/jobs` to create and list your jobs.
 
-Clerk, Neon, and Doppler resources and real credentials must be configured for a live run. This repository does not provision accounts or contain credentials.
+Clerk, Neon, Doppler, and (for file storage) R2 resources and real credentials must be configured for a live run. This repository does not provision accounts or contain credentials.
 
 ## Commands
 
@@ -54,6 +54,7 @@ The standard `dev`, `build`, and `start` commands also work when a hosting platf
 - **API layer:** `src/pages/api` and `src/server/api` handle transport, authentication, authorization, and Zod validation. Public tRPC procedures remain public; protected procedures reject requests without a verified Clerk user ID.
 - **Service layer:** `src/libs/user/userJobHelper.ts` owns job operations and depends on a small repository interface. Inject repositories to test service behavior independently of the ORM.
 - **Data layer:** `DrizzleJobRepository` implements persistence. `src/server/db/schema.ts` defines posts and jobs; `src/server/db.ts` connects Drizzle to Neon over HTTP. Use a WebSocket or PostgreSQL driver if future features require interactive transactions.
+- **File storage:** `src/server/storage/r2.ts` wraps the S3 SDK for a private Cloudflare R2 bucket. The protected `storage` tRPC router derives object ownership from the verified Clerk user ID and issues short-lived signed URLs. Storage configuration is loaded lazily, so the base app and CI build work without R2 credentials.
 - **Authentication:** `src/proxy.ts` establishes Clerk request authentication; `_app.tsx` provides Clerk's client context. Users and sessions live in Clerk. Records store Clerk user IDs; the database has no local user/session tables or foreign keys to Clerk. Add verified webhooks if you later need user profile synchronization or deletion cleanup.
 - **Ownership:** Derive user IDs from verified server authentication, never client input. Scope reads and writes to that ID. Public access to the home and jobs pages does not grant access to protected tRPC procedures.
 - **Secrets:** Store separate development, staging, and production values in Doppler. `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is intentionally browser-visible and must be available at build time; all other listed variables stay server-side. Never add a `NEXT_PUBLIC_` prefix to secrets or log credentials.
@@ -66,9 +67,61 @@ Edit `src/server/db/schema.ts`, run `npm run db:generate`, inspect and commit th
 
 This is a fresh starter schema. The initial migration creates posts and jobs only. It does not migrate existing user accounts, sessions, or application records from an older installation. If adapting an existing app, plan a separate account and data migration before connecting a populated production database.
 
+## Cloudflare R2 file storage
+
+1. Create a private bucket in the [Cloudflare R2 dashboard](https://dash.cloudflare.com). Leave public access (`r2.dev` and custom public domains) disabled. Use separate buckets and credentials for development and production.
+2. Create an [R2 S3 API token](https://developers.cloudflare.com/r2/api/tokens/) with **Object Read & Write** access scoped to that bucket. Copy its Access Key ID and Secret Access Key into Doppler, not into the repository.
+3. Set these server-only Doppler variables: `R2_ACCOUNT_ID` (the 32-character Cloudflare account ID), `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`.
+4. Apply `config/r2-cors.example.json` in the bucket's CORS settings for local development. Replace or extend `AllowedOrigins` with your exact deployed app origins for other environments. No wildcard origin is needed. The upload request must send the returned `Content-Type` header.
+5. Restart the app after changing secrets. The S3 client uses region `auto` and endpoint `https://<account-id>.r2.cloudflarestorage.com`, following [Cloudflare's S3 SDK example](https://developers.cloudflare.com/r2/examples/aws/aws-sdk-js-v3/).
+
+All R2 variables are optional for the rest of the app. Calling storage procedures without all four produces `PRECONDITION_FAILED` with a setup message. R2 resources are not provisioned automatically; no live bucket credentials are committed.
+
+The authenticated API exposes:
+
+| Procedure | Input | Result |
+| --- | --- | --- |
+| `storage.createUploadUrl` | `{ fileName, contentType }` | `{ key, url, headers, expiresIn }` for a direct browser PUT |
+| `storage.createDownloadUrl` | `{ key }` | `{ url, expiresIn }` for a private GET download |
+| `storage.deleteObject` | `{ key }` | `{ deleted: true }` after deleting an owned object |
+
+For example, inside a React component or custom hook:
+
+```tsx
+const upload = api.storage.createUploadUrl.useMutation();
+const download = api.storage.createDownloadUrl.useMutation();
+
+async function uploadFile(file: File) {
+  const signed = await upload.mutateAsync({
+    fileName: file.name,
+    contentType: file.type || "application/octet-stream",
+  });
+  const response = await fetch(signed.url, {
+    method: "PUT",
+    headers: signed.headers,
+    body: file,
+  });
+  if (!response.ok) throw new Error("File upload failed");
+  return signed.key; // Save this key with your application's record after success.
+}
+
+async function downloadFile(key: string) {
+  const signed = await download.mutateAsync({ key });
+  window.location.assign(signed.url);
+}
+```
+
+Import `api` from `~/utils/api`. The service also supports server-side use via `getR2Storage()` from `~/server/storage`; always pass a verified user ID, never a user ID supplied by a client.
+
+Object keys use `users/<clerk-user-id>/<random-uuid>/<sanitized-filename>`, so repeated filenames do not overwrite one another. Download and delete operations reject foreign user prefixes and path traversal. Downloads are served as attachments with `application/octet-stream`. These procedures do not list bucket contents or create public object URLs.
+
+Signed URLs expire after five minutes and can be reused until they expire. Treat them as temporary bearer credentials and avoid logging them. The upload signature binds the `Content-Type` header, but it does not inspect file contents or enforce a hard size/quota limit. Add application-specific validation and quotas before issuing URLs when your product needs them. This starter does not create a file metadata table; persist returned keys in your own data model as needed.
+
+Tests exercise real offline SigV4 signing, ownership and traversal rejection, configuration errors, and API authentication. Real R2 uploads and downloads require a configured account, bucket, credentials, and CORS policy. See [presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/) and [R2 CORS](https://developers.cloudflare.com/r2/buckets/cors/) for provider details.
+
 ## CI and deployment
 
-GitHub Actions runs installation, type checking, linting, Vitest, the dependency audit, and a production build with explicit non-secret placeholder values. CI verifies compilation without contacting Clerk or Neon; live authentication and persistence need configured services.
+GitHub Actions runs installation, type checking, linting, Vitest, the dependency audit, and a production build with explicit non-secret placeholder values. CI verifies compilation without contacting Clerk, Neon, or R2; live authentication and persistence need configured services.
 
 For Vercel, import this private repository and configure the [Doppler Vercel integration](https://docs.doppler.com/docs/vercel) to sync the appropriate secrets config to each deployment environment. Keep preview deployments on a separate Neon branch and Clerk development instance. The normal build command is `npm run build`; the platform injects the synced variables. Apply migrations separately before releasing code that depends on them.
 

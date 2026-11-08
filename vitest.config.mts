@@ -8,7 +8,11 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     coverage: {
       provider: "v8",
-      include: ["src/libs/**/*.ts", "src/server/api/**/*.ts"],
+      include: [
+        "src/libs/**/*.ts",
+        "src/server/api/**/*.ts",
+        "src/server/storage/**/*.ts",
+      ],
     },
   },
 });

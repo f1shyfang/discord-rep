@@ -34,7 +34,9 @@
     "zod": "^4.6.7",
     "@clerk/nextjs": "^7.9.25",
     "@neondatabase/serverless": "^1.2.0",
-    "drizzle-orm": "^0.45.4"
+    "drizzle-orm": "^0.45.4",
+    "@aws-sdk/client-s3": "^3.1164.0",
+    "@aws-sdk/s3-request-presigner": "^3.1164.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",
