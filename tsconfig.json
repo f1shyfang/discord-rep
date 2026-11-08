@@ -38,7 +38,8 @@
     "**/*.js",
     "**/*.mjs",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    ".cloudflare/types"
   ],
   "exclude": ["node_modules", "coverage", "out", "build"]
 }

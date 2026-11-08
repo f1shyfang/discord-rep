@@ -1,0 +1,23 @@
+name: Chat maintenance
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+permissions:
+  contents: read
+concurrency: chat-maintenance
+jobs:
+  cleanup:
+    if: github.event_name == 'workflow_dispatch' || vars.CHAT_MAINTENANCE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: chat-maintenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: node scripts/cleanup-chat.mjs
+        env:
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}

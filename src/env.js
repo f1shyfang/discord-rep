@@ -5,6 +5,7 @@ export const env = createEnv({
   server: {
     DATABASE_URL: z.string().url().startsWith("postgresql://"),
     CLERK_SECRET_KEY: z.string().min(1),
+    CLERK_WEBHOOK_SIGNING_SECRET: z.string().min(1).optional(),
     R2_ACCOUNT_ID: z
       .string()
       .regex(/^[a-f0-9]{32}$/i)
@@ -23,6 +24,7 @@ export const env = createEnv({
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+    CLERK_WEBHOOK_SIGNING_SECRET: process.env.CLERK_WEBHOOK_SIGNING_SECRET,
     NODE_ENV: process.env.NODE_ENV,
     R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
     R2_BUCKET_NAME: process.env.R2_BUCKET_NAME,

@@ -8,6 +8,34 @@
       "when": 1794106230644,
       "tag": "0000_blushing_triathlon",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794117182128,
+      "tag": "0001_chat_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794117581975,
+      "tag": "0002_chat_activity",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794118798908,
+      "tag": "0003_message_search",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794118897567,
+      "tag": "0004_identity_revocations",
+      "breakpoints": true
     }
   ]
 }

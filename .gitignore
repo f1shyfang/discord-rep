@@ -47,3 +47,11 @@ yarn-error.log*
 .clerk/
 .doppler/
 .idea/
+/dist/
+.vinext/
+.cloudflare/
+.dev.vars
+
+# Browser verification artifacts
+/playwright-report/
+/test-results/

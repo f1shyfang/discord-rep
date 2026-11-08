@@ -1,4 +1,10 @@
-# lyrainspiredfullstacktemp
+# discord-rep
+
+A standalone Discord-style community chat application.
+
+## Discord-style app design
+
+See the [design documentation](docs/design/README.md) for the SDD, UI/UX specification, HLD, LLD, database schema, and API interfaces. The text-chat application is implemented; voice and file uploads/scanning are deferred. See [implementation and verification notes](docs/IMPLEMENTATION.md) for setup, supported flows, runtime choices and release gates.
 
 A fullstack starter adapted from [Anh Dao's Next.js guidelines](https://github.com/zitianqin/anh-dao-2024-nextjs-guidelines), built upon Nam Dao's original work. Original attribution and the Pages Router, TypeScript, Tailwind, tRPC, and Zod architecture are retained; tests now use Vitest.
 
@@ -24,10 +30,10 @@ Next.js 16 uses Turbopack for development and production builds and `src/proxy.t
 1. Install Node.js 26.13.0 LTS (`nvm install && nvm use`) and run `npm ci`.
 2. Create a Clerk application in the [Clerk Dashboard](https://dashboard.clerk.com). Enable your preferred sign-in methods there, including Google if needed. Copy the development publishable key and secret key into Doppler as described below. OAuth credentials are configured in Clerk, not in this app.
 3. Create a [Neon project](https://console.neon.tech) and a development branch. Copy its pooled connection URL into `DATABASE_URL` and its direct connection URL into `DIRECT_DATABASE_URL`. Both use PostgreSQL with `sslmode=require`.
-4. Install the [Doppler CLI](https://docs.doppler.com/docs/cli), log in with `doppler login`, and create a project named `lyrainspiredfullstacktemp` with a `dev` config. If using a different project/config, update `doppler.yaml`.
+4. Install the [Doppler CLI](https://docs.doppler.com/docs/cli), log in with `doppler login`, and create a project named `discord` with a `dev` config, matching `doppler.yaml`. If using a different project/config, update `doppler.yaml`.
 5. In the Doppler dashboard, add the Clerk and database variables listed in `.env.example`. Add the optional R2 variables when enabling file storage (see below). That file contains placeholders only. Run `doppler setup` in this directory to select the project/config.
 6. Run `npm run db:migrate` to apply the committed Drizzle migration to your development database.
-7. Run `npm run dev:secrets` and open [localhost:3000](http://localhost:3000). Sign up, then open `/jobs` to create and list your jobs.
+7. Run `npm run dev:secrets` and open [localhost:3000](http://localhost:3000). Sign up and open `/channels/@me` to complete your profile and create or join a community. The starter `/jobs` example remains available.
 
 Clerk, Neon, Doppler, and (for file storage) R2 resources and real credentials must be configured for a live run. This repository does not provision accounts or contain credentials.
 
@@ -53,9 +59,9 @@ The standard `dev`, `build`, and `start` commands also work when a hosting platf
 
 - **API layer:** `src/pages/api` and `src/server/api` handle transport, authentication, authorization, and Zod validation. Public tRPC procedures remain public; protected procedures reject requests without a verified Clerk user ID.
 - **Service layer:** `src/libs/user/userJobHelper.ts` owns job operations and depends on a small repository interface. Inject repositories to test service behavior independently of the ORM.
-- **Data layer:** `DrizzleJobRepository` implements persistence. `src/server/db/schema.ts` defines posts and jobs; `src/server/db.ts` connects Drizzle to Neon over HTTP. Use a WebSocket or PostgreSQL driver if future features require interactive transactions.
+- **Data layer:** `DrizzleJobRepository` implements persistence. `src/server/db/schema.ts` defines starter posts/jobs and exports the chat schema; `src/server/db.ts` connects Drizzle to Neon over HTTP. Use a WebSocket or PostgreSQL driver if future features require interactive transactions.
 - **File storage:** `src/server/storage/r2.ts` wraps the S3 SDK for a private Cloudflare R2 bucket. The protected `storage` tRPC router derives object ownership from the verified Clerk user ID and issues short-lived signed URLs. Storage configuration is loaded lazily, so the base app and CI build work without R2 credentials.
-- **Authentication:** `src/proxy.ts` establishes Clerk request authentication; `_app.tsx` provides Clerk's client context. Users and sessions live in Clerk. Records store Clerk user IDs; the database has no local user/session tables or foreign keys to Clerk. Add verified webhooks if you later need user profile synchronization or deletion cleanup.
+- **Authentication:** `src/proxy.ts` establishes Clerk request authentication; `_app.tsx` provides Clerk's client context. Clerk owns identity and sessions. Chat stores an application profile mapped to the verified Clerk ID, with UUID references between domain records; starter records still store Clerk IDs directly. The signed Clerk webhook handles account deletion and session revocation when configured.
 - **Ownership:** Derive user IDs from verified server authentication, never client input. Scope reads and writes to that ID. Public access to the home and jobs pages does not grant access to protected tRPC procedures.
 - **Secrets:** Store separate development, staging, and production values in Doppler. `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is intentionally browser-visible and must be available at build time; all other listed variables stay server-side. Never add a `NEXT_PUBLIC_` prefix to secrets or log credentials.
 - **Errors:** Propagate database failures through tRPC so clients can display errors; do not hide them behind successful empty results.
@@ -65,7 +71,7 @@ The standard `dev`, `build`, and `start` commands also work when a hosting platf
 
 Edit `src/server/db/schema.ts`, run `npm run db:generate`, inspect and commit the generated SQL and metadata in `drizzle/`, then run `npm run db:migrate` against an isolated Neon development branch. Use a direct URL for migrations and a pooled URL for runtime queries. Apply reviewed migrations to production in a controlled deployment step; builds do not run migrations automatically.
 
-This is a fresh starter schema. The initial migration creates posts and jobs only. It does not migrate existing user accounts, sessions, or application records from an older installation. If adapting an existing app, plan a separate account and data migration before connecting a populated production database.
+This is a fresh starter schema. Migration `0000` creates posts and jobs; migrations `0001`–`0004` add the chat schema, presence, full-text index and identity revocation state. It does not migrate existing user accounts, sessions, or application records from an older installation. If adapting an existing app, plan a separate account and data migration before connecting a populated production database.
 
 ## Cloudflare R2 file storage
 

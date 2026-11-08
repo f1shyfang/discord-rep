@@ -1,0 +1,1 @@
+CREATE INDEX "messages_search" ON "messages" USING gin (to_tsvector('simple', "body")) WHERE "messages"."deleted_at" is null;

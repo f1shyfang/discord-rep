@@ -7,6 +7,8 @@ export default defineConfig([
   ...nextTypescript,
   globalIgnores([
     ".next/**",
+    ".cloudflare/**",
+    "dist/**",
     "out/**",
     "build/**",
     "coverage/**",

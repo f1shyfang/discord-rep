@@ -40,3 +40,5 @@ export const jobs = pgTable(
 );
 
 export type Job = typeof jobs.$inferSelect;
+
+export * from "./chat-schema";
