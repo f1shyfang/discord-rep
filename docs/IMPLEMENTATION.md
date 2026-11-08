@@ -49,8 +49,8 @@ deferred during implementation. These features are not simulated by the UI.
    need `DIRECT_DATABASE_URL` (the existing `DATABASE_URL_UNPOOLED` secret is also accepted as the
    equivalent direct URL).
 3. Review `drizzle/0001` through `0004`, then run `npm run db:migrate` against the
-   intended development branch. No main/production database migration was applied
-   during implementation. Test migrations only used isolated disposable schemas.
+   intended development branch. The deployed database has migrations `0000`–`0004`
+   applied; automated browser tests use isolated disposable schemas.
    Migration `0001` includes a deferred owner-membership constraint and orders
    composite unique indexes before their foreign keys; preserve those reviewed
    statements when regenerating migrations. Prefer migrations over `db:push`.
@@ -124,8 +124,8 @@ verification, deletion/revocation and purge rollback constraints.
 - The server row is the permission lock; message writes also lock a conversation.
   Canonical DM-pair advisory locks serialize blocking, friend changes and sends.
   Message sequence and event sequence allocation are committed atomically.
-- No production deployment or capacity claim is implied by compilation/browser
-  verification. The design's 1,000-client latency/load budget, WCAG audit, monitored
+- The live deployment has passed the smoke checks recorded below. The design's
+  1,000-client latency/load budget, WCAG audit, monitored
   backups/restore drill, cost targets and regional failure recovery remain release
   verification gates. Member lists currently use bounded snapshots;
   further friends/member pagination and virtualization is needed before claiming those scale targets.
@@ -143,8 +143,8 @@ verification, deletion/revocation and purge rollback constraints.
   checked in the browser at 320, 390, 768 and 1024 px.
 - Next.js production build and vinext Cloudflare production bundle passed.
 - Regenerating the Drizzle schema found no pending differences.
-- No production deployment or main-database migration was performed. Browser test
-  users and temporary schemas were removed after testing.
+- Browser test users and temporary schemas were removed after testing.
+- Production deployment and migrations were completed subsequently, as recorded below.
 
 ### Follow-up verification and corrections
 
@@ -164,9 +164,39 @@ Verification reproduced and corrected these additional cases:
 - The desktop member-list toggle now adds/removes the member panel, keeping its
   visible state consistent with the button's expanded state.
 
-The main-database schema check found none of `app_users`, `servers`, `channels`,
-`conversations` or `messages`. This confirms that the committed migrations are
-still required before using the app against that database. Verification does not
-apply those migrations or deploy the application. Voice/uploads, load and
-latency budgets, full accessibility review, and backup/restore verification remain
-outside the verified scope described above.
+## Cloudflare deployment — 8 November 2026
+
+Live app: [discord.michaelfeng.me](https://discord.michaelfeng.me), served by the
+`discord` Worker using the vinext bundle and custom domain. Migrations
+`0000`–`0004` were applied to the existing Neon database; the application tables
+were confirmed afterward.
+
+Doppler project `discord`, config `prd`, stores the production Clerk keys,
+webhook signing secret, pooled runtime URL and direct maintenance URL. The Worker
+receives only the pooled URL, Clerk keys and signing secret. `APP_ORIGIN` restricts
+production Clerk tokens to the deployed origin. The browser bundle was checked
+for the production publishable key and absence of the development key.
+
+The production Clerk domain's DNS and certificates are verified. Its webhook
+subscribes to `user.deleted`, `session.ended`, `session.removed` and
+`session.revoked`. Actual temporary-user deletion deliveries created revocation
+records in the application database.
+
+The `chat-maintenance` GitHub environment holds `DIRECT_DATABASE_URL` and the
+repository variable `CHAT_MAINTENANCE_ENABLED=true` enables daily cleanup at
+03:17 UTC. The initial manually dispatched
+[maintenance run](https://github.com/f1shyfang/discord-rep/actions/runs/42457960660)
+succeeded.
+
+A two-user browser smoke check against the deployed HTTPS origin passed production
+sign-in, profile onboarding, server creation, invitation acceptance, live SSE
+message delivery, persistence after reload, rejection of member-only server
+deletion, and 390 px mobile overflow checks. The test community was soft-deleted
+and both temporary Clerk users were removed. Anonymous event streams return 401;
+GET requests to the webhook return 405.
+
+Production currently uses the existing Neon database also referenced by local
+development configuration. Provision a separate development branch before local
+experiments against real user data. Voice/uploads, load and latency budgets,
+full accessibility review, and backup/restore verification remain outside the
+verified scope.

@@ -15,9 +15,10 @@ export default defineConfig({
     env: {
       ASSETS: bindings.assets(),
       DATABASE_URL: bindings.secret(),
-      DIRECT_DATABASE_URL: bindings.secret(),
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: bindings.secret(),
       CLERK_SECRET_KEY: bindings.secret(),
+      CLERK_WEBHOOK_SIGNING_SECRET: bindings.secret(),
+      APP_ORIGIN: bindings.text("https://discord.michaelfeng.me"),
     },
   }),
 });

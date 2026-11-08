@@ -12,12 +12,12 @@ This copy uses **Clerk** for authentication, **Drizzle ORM** for database access
 
 ## Versions and compatibility
 
-| Component | Version |
-| --- | --- |
-| Next.js | 16.4.5 (Active LTS line) |
-| Node.js | 26.13.0 LTS |
-| React / React DOM | 19.3.1 stable |
-| TypeScript compiler | 7.0.2 stable |
+| Component           | Version                  |
+| ------------------- | ------------------------ |
+| Next.js             | 16.4.5 (Active LTS line) |
+| Node.js             | 26.13.0 LTS              |
+| React / React DOM   | 19.3.1 stable            |
+| TypeScript compiler | 7.0.2 stable             |
 
 `.nvmrc` pins Node 26.13.0 and CI reads that file. The engine range accepts Node 26.13.0 through the rest of Node 26. React and React DOM use the same exact version.
 
@@ -39,19 +39,19 @@ Clerk, Neon, Doppler, and (for file storage) R2 resources and real credentials m
 
 ## Commands
 
-| Command | Purpose |
-| --- | --- |
-| `npm run dev:secrets` | Start Next.js with Doppler secrets |
-| `npm run build:secrets` | Build with Doppler secrets |
-| `npm run start:secrets` | Run the production build with Doppler secrets |
-| `npm run db:generate` | Generate SQL migrations after editing the schema |
-| `npm run db:migrate` | Apply migrations using Doppler's direct database URL |
-| `npm run db:push` | Push schema changes directly to a disposable development branch |
-| `npm run db:studio` | Inspect the database with Drizzle Studio |
-| `npm run typecheck` | Check TypeScript |
-| `npm run lint` | Run ESLint |
-| `npm test` | Run Vitest tests |
-| `npm run test:coverage` | Run tests with V8 coverage |
+| Command                 | Purpose                                                         |
+| ----------------------- | --------------------------------------------------------------- |
+| `npm run dev:secrets`   | Start Next.js with Doppler secrets                              |
+| `npm run build:secrets` | Build with Doppler secrets                                      |
+| `npm run start:secrets` | Run the production build with Doppler secrets                   |
+| `npm run db:generate`   | Generate SQL migrations after editing the schema                |
+| `npm run db:migrate`    | Apply migrations using Doppler's direct database URL            |
+| `npm run db:push`       | Push schema changes directly to a disposable development branch |
+| `npm run db:studio`     | Inspect the database with Drizzle Studio                        |
+| `npm run typecheck`     | Check TypeScript                                                |
+| `npm run lint`          | Run ESLint                                                      |
+| `npm test`              | Run Vitest tests                                                |
+| `npm run test:coverage` | Run tests with V8 coverage                                      |
 
 The standard `dev`, `build`, and `start` commands also work when a hosting platform or shell already injects environment variables. You can use a gitignored `.env.local` locally instead, but Doppler is the primary secrets source. Drizzle commands use Doppler; no dotenv files are loaded by `drizzle.config.ts`.
 
@@ -85,11 +85,11 @@ All R2 variables are optional for the rest of the app. Calling storage procedure
 
 The authenticated API exposes:
 
-| Procedure | Input | Result |
-| --- | --- | --- |
-| `storage.createUploadUrl` | `{ fileName, contentType }` | `{ key, url, headers, expiresIn }` for a direct browser PUT |
-| `storage.createDownloadUrl` | `{ key }` | `{ url, expiresIn }` for a private GET download |
-| `storage.deleteObject` | `{ key }` | `{ deleted: true }` after deleting an owned object |
+| Procedure                   | Input                       | Result                                                      |
+| --------------------------- | --------------------------- | ----------------------------------------------------------- |
+| `storage.createUploadUrl`   | `{ fileName, contentType }` | `{ key, url, headers, expiresIn }` for a direct browser PUT |
+| `storage.createDownloadUrl` | `{ key }`                   | `{ url, expiresIn }` for a private GET download             |
+| `storage.deleteObject`      | `{ key }`                   | `{ deleted: true }` after deleting an owned object          |
 
 For example, inside a React component or custom hook:
 
@@ -129,7 +129,25 @@ Tests exercise real offline SigV4 signing, ownership and traversal rejection, co
 
 GitHub Actions runs installation, type checking, linting, Vitest, the dependency audit, and a production build with explicit non-secret placeholder values. CI verifies compilation without contacting Clerk, Neon, or R2; live authentication and persistence need configured services.
 
-For Vercel, import this private repository and configure the [Doppler Vercel integration](https://docs.doppler.com/docs/vercel) to sync the appropriate secrets config to each deployment environment. Keep preview deployments on a separate Neon branch and Clerk development instance. The normal build command is `npm run build`; the platform injects the synced variables. Apply migrations separately before releasing code that depends on them.
+The app is deployed on Cloudflare Workers at
+[discord.michaelfeng.me](https://discord.michaelfeng.me). The `discord` Worker uses
+`cloudflare.config.ts` and the vinext production bundle. Production secrets are
+stored in Doppler project `discord`, config `prd`; Clerk webhooks and daily
+GitHub Actions cleanup are enabled. See [deployment verification](docs/IMPLEMENTATION.md#cloudflare-deployment--8-november-2026)
+for the checks performed and remaining release gates.
+
+For subsequent Cloudflare releases, apply reviewed database migrations separately,
+build with `npm run build:vinext` using production Clerk keys, and deploy the
+prebuilt output with `cf deploy --prebuilt --secrets-file <private-json-file>`.
+The secret file must contain only `DATABASE_URL`,
+`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` and
+`CLERK_WEBHOOK_SIGNING_SECRET`; keep it outside the repository and remove it after
+use. The direct database URL belongs only in migration/maintenance environments.
+Production and local development currently reference the same existing database;
+use a separate development branch before experimenting with real user data.
+Voice and chat file uploads remain deferred.
+
+For Vercel, import this repository and configure the [Doppler Vercel integration](https://docs.doppler.com/docs/vercel) to sync the appropriate secrets config to each deployment environment. Keep preview deployments on a separate Neon branch and Clerk development instance. The normal build command is `npm run build`; the platform injects the synced variables. Apply migrations separately before releasing code that depends on them.
 
 For another host, inject a scoped Doppler service token through that platform's secret store and use `doppler run -- npm run start`. Never commit a service token. Keep migrations out of routine builds and untrusted pull-request jobs.
 
