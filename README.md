@@ -143,8 +143,10 @@ The secret file must contain only `DATABASE_URL`,
 `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` and
 `CLERK_WEBHOOK_SIGNING_SECRET`; keep it outside the repository and remove it after
 use. The direct database URL belongs only in migration/maintenance environments.
-Production and local development currently reference the same existing database;
-use a separate development branch before experimenting with real user data.
+Production uses Neon branch `main`; local development, Doppler `dev` /
+`dev_personal`, and Vercel Development/Preview use the separate `development`
+branch with distinct credentials. Development started with the production schema
+and no application data. Keep migrations and experiments on that branch.
 Voice and chat file uploads remain deferred.
 
 For Vercel, import this repository and configure the [Doppler Vercel integration](https://docs.doppler.com/docs/vercel) to sync the appropriate secrets config to each deployment environment. Keep preview deployments on a separate Neon branch and Clerk development instance. The normal build command is `npm run build`; the platform injects the synced variables. Apply migrations separately before releasing code that depends on them.

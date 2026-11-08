@@ -195,8 +195,31 @@ deletion, and 390 px mobile overflow checks. The test community was soft-deleted
 and both temporary Clerk users were removed. Anonymous event streams return 401;
 GET requests to the webhook return 405.
 
-Production currently uses the existing Neon database also referenced by local
-development configuration. Provision a separate development branch before local
-experiments against real user data. Voice/uploads, load and latency budgets,
-full accessibility review, and backup/restore verification remain outside the
-verified scope.
+### Development database isolation
+
+Production remains on `main` (`br-weathered-fog-a762cjb8`). Development uses the
+schema-only branch `development` (`br-little-field-a7b46iyi`) with its own endpoint
+and a development-only password for its `neondb_owner` role. The schema restore
+retains this owner, allowing subsequent migrations to alter copied objects.
+All 29 application tables started empty;
+no production user data was copied. Schema comparison matched production, apart
+from equivalent parentheses in one CHECK constraint after schema restoration.
+The five Drizzle journal entries were initialized from production only after
+verifying their hashes against the committed SQL, so subsequent migrations run
+normally without recreating existing tables.
+
+Local `.env.local` database URLs and Postgres aliases, Doppler `dev` and
+`dev_personal`, and Vercel Development/Preview database variables all point to the
+development endpoint. Vercel variables previously shared with Production were
+split into separate scopes. Production Doppler, Cloudflare runtime and GitHub
+maintenance retain the production database configuration. Clerk development and
+production instances remain separate. The three-user browser journey passed
+using a disposable schema on the development branch, and removed its temporary
+Clerk users and schema afterward.
+
+Verification confirmed both development connection types, successful development
+migration checks, development writes absent from production, and production
+rejection of the development credentials. Keep local experiments and automated
+browser tests on development; do not reset it from production with user data.
+Voice/uploads, load and latency budgets, full accessibility review, and
+backup/restore verification remain outside the verified scope.
