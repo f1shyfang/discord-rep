@@ -21,7 +21,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - run: npm audit --audit-level=low
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm test -- --runInBand
+      - run: npm run test:coverage
       - run: npm run build
