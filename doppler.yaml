@@ -1,0 +1,3 @@
+setup:
+  project: lyrainspiredfullstacktemp
+  config: dev
