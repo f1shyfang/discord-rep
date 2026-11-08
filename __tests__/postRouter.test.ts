@@ -1,18 +1,21 @@
-/** @jest-environment node */
+import { createTRPCClient, httpBatchLink } from "@trpc/client";
+import { createHTTPServer } from "@trpc/server/adapters/standalone";
+import superjson from "superjson";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { type SQL } from "drizzle-orm";
 import { type db } from "~/server/db";
 import { postRouter } from "~/server/api/routers/post";
 
-jest.mock("~/server/db", () => ({ db: {} }));
-jest.mock("~/libs/buildHelpers", () => ({
-  userJobHelper: { insertJob: jest.fn(), getJobs: jest.fn() },
+vi.mock("~/server/db", () => ({ db: {} }));
+vi.mock("~/libs/buildHelpers", () => ({
+  userJobHelper: { insertJob: vi.fn(), getJobs: vi.fn() },
 }));
 
 import { userJobHelper } from "~/libs/buildHelpers";
 
 describe("postRouter authentication and ownership", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
 
   it("keeps public greetings accessible", async () => {
     const caller = postRouter.createCaller({
@@ -43,12 +46,12 @@ describe("postRouter authentication and ownership", () => {
   });
 
   it("assigns posts to the verified Clerk user", async () => {
-    const returning = jest
+    const returning = vi
       .fn()
       .mockResolvedValue([{ id: 1, name: "test", createdById: "user_owner" }]);
-    const values = jest.fn().mockReturnValue({ returning });
+    const values = vi.fn().mockReturnValue({ returning });
     const database = {
-      insert: jest.fn().mockReturnValue({ values }),
+      insert: vi.fn().mockReturnValue({ values }),
     } as unknown as typeof db;
     const caller = postRouter.createCaller({
       userId: "user_owner",
@@ -62,13 +65,13 @@ describe("postRouter authentication and ownership", () => {
   });
 
   it("filters latest posts by the verified user ID", async () => {
-    const limit = jest.fn().mockResolvedValue([]);
-    const orderBy = jest.fn().mockReturnValue({ limit });
-    const where = jest.fn().mockReturnValue({ orderBy });
+    const limit = vi.fn().mockResolvedValue([]);
+    const orderBy = vi.fn().mockReturnValue({ limit });
+    const where = vi.fn().mockReturnValue({ orderBy });
     const database = {
-      select: jest
+      select: vi
         .fn()
-        .mockReturnValue({ from: jest.fn().mockReturnValue({ where }) }),
+        .mockReturnValue({ from: vi.fn().mockReturnValue({ where }) }),
     } as unknown as typeof db;
     const caller = postRouter.createCaller({
       userId: "user_owner",
@@ -90,5 +93,45 @@ describe("postRouter authentication and ownership", () => {
     await caller.getJobs();
     expect(userJobHelper.insertJob).toHaveBeenCalledWith("user_owner");
     expect(userJobHelper.getJobs).toHaveBeenCalledWith("user_owner");
+  });
+});
+
+describe("tRPC 11 HTTP protocol", () => {
+  it("serializes requests and enforces auth and Zod validation over HTTP", async () => {
+    const server = createHTTPServer({
+      router: postRouter,
+      createContext: () => ({ userId: null, db: {} as typeof db }),
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string")
+        throw new Error("Missing test server address");
+      const client = createTRPCClient<typeof postRouter>({
+        links: [
+          httpBatchLink({
+            url: `http://127.0.0.1:${address.port}`,
+            transformer: superjson,
+          }),
+        ],
+      });
+      await expect(
+        client.hello.query({ text: "HTTP client" }),
+      ).resolves.toEqual({ greeting: "Hello HTTP client" });
+      await expect(client.getSecretMessage.query()).rejects.toMatchObject({
+        data: { code: "UNAUTHORIZED" },
+      });
+      // Simulate a malformed request from an untyped client.
+      await expect(
+        client.hello.query({ text: 42 } as unknown as { text: string }),
+      ).rejects.toMatchObject({ data: { code: "BAD_REQUEST" } });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
   });
 });

@@ -26,18 +26,19 @@
     /* Path Aliases */
 
     "paths": {
-      "~/*": ["./src/*"],
-    },
+      "~/*": ["./src/*"]
+    }
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    "**/*.mts",
     "**/*.cjs",
     "**/*.js",
     "**/*.mjs",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"],
+  "exclude": ["node_modules", "coverage", "out", "build"]
 }

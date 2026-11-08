@@ -1,12 +1,13 @@
+import { beforeEach, describe, expect, it, vi, type Mocked } from "vitest";
 import { UserJobHelper, type JobRepository } from "~/libs/user/userJobHelper";
 
 describe("UserJobHelper", () => {
-  const repository: jest.Mocked<JobRepository> = {
-    insert: jest.fn(),
-    findByUserId: jest.fn(),
+  const repository: Mocked<JobRepository> = {
+    insert: vi.fn(),
+    findByUserId: vi.fn(),
   };
   const helper = new UserJobHelper(repository);
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => vi.clearAllMocks());
 
   it("assigns new jobs to the authenticated user", async () => {
     await expect(helper.insertJob("user_123")).resolves.toBe(true);

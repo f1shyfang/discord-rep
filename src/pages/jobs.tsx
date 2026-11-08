@@ -20,10 +20,10 @@ export default function Jobs() {
       ) : isSignedIn ? (
         <>
           <button
-            disabled={createJob.isLoading}
+            disabled={createJob.isPending}
             onClick={() => createJob.mutate()}
           >
-            {createJob.isLoading ? "Creating..." : "Create new job"}
+            {createJob.isPending ? "Creating..." : "Create new job"}
           </button>
           {jobs.isLoading && <p>Loading jobs...</p>}
           {(jobs.error ?? createJob.error) && (

@@ -1,6 +1,6 @@
 # lyrainspiredfullstacktemp
 
-A fullstack starter adapted from [Anh Dao's Next.js guidelines](https://github.com/zitianqin/anh-dao-2024-nextjs-guidelines), built upon Nam Dao's original work. Original attribution and the Pages Router, TypeScript, Tailwind, tRPC, Zod, and Jest architecture are retained.
+A fullstack starter adapted from [Anh Dao's Next.js guidelines](https://github.com/zitianqin/anh-dao-2024-nextjs-guidelines), built upon Nam Dao's original work. Original attribution and the Pages Router, TypeScript, Tailwind, tRPC, and Zod architecture are retained; tests now use Vitest.
 
 This copy uses **Clerk** for authentication, **Drizzle ORM** for database access, **Neon Postgres** for storage, and **Doppler** for secrets. It uses Next.js 16 LTS, Node.js 26 LTS, stable React 19, TypeScript 7, and the Clerk Core 3 SDK, while retaining the source's Pages Router architecture.
 
@@ -17,7 +17,7 @@ This copy uses **Clerk** for authentication, **Drizzle ORM** for database access
 
 TypeScript 7's native compiler is installed as `@typescript/native` using an npm alias. Its executable is still `tsc`, so `npm run typecheck` and Next.js's default CLI checker use TypeScript 7. ESLint and other tools that need the older JavaScript compiler API resolve `typescript` to Microsoft's `@typescript/typescript6` compatibility package (which provides `tsc6`). This follows [Microsoft's side-by-side setup](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-6.0). Next.js uses its [project-local CLI type checker](https://nextjs.org/docs/app/api-reference/config/typescript#using-typescript-7); type errors are not skipped.
 
-Next.js 16 uses Turbopack for development and production builds and `src/proxy.ts` for Clerk request authentication. ESLint uses flat configuration in `eslint.config.mjs`; builds run lint explicitly because Next.js 16 no longer runs it automatically. Jest configuration uses JavaScript ESM so it does not depend on `ts-node` or the TypeScript compiler API.
+Next.js 16 uses Turbopack for development and production builds and `src/proxy.ts` for Clerk request authentication. ESLint uses flat configuration in `eslint.config.mjs`; builds run lint explicitly because Next.js 16 no longer runs it automatically. Vitest runs tests as ESM and does not depend on `ts-node` or the TypeScript compiler API.
 
 ## Quick start
 
@@ -44,7 +44,8 @@ Clerk, Neon, and Doppler resources and real credentials must be configured for a
 | `npm run db:studio` | Inspect the database with Drizzle Studio |
 | `npm run typecheck` | Check TypeScript |
 | `npm run lint` | Run ESLint |
-| `npm test -- --runInBand` | Run Jest tests |
+| `npm test` | Run Vitest tests |
+| `npm run test:coverage` | Run tests with V8 coverage |
 
 The standard `dev`, `build`, and `start` commands also work when a hosting platform or shell already injects environment variables. You can use a gitignored `.env.local` locally instead, but Doppler is the primary secrets source. Drizzle commands use Doppler; no dotenv files are loaded by `drizzle.config.ts`.
 
@@ -67,7 +68,7 @@ This is a fresh starter schema. The initial migration creates posts and jobs onl
 
 ## CI and deployment
 
-GitHub Actions runs installation, type checking, linting, Jest, and a production build with explicit non-secret placeholder values. CI verifies compilation without contacting Clerk or Neon; live authentication and persistence need configured services.
+GitHub Actions runs installation, type checking, linting, Vitest, the dependency audit, and a production build with explicit non-secret placeholder values. CI verifies compilation without contacting Clerk or Neon; live authentication and persistence need configured services.
 
 For Vercel, import this private repository and configure the [Doppler Vercel integration](https://docs.doppler.com/docs/vercel) to sync the appropriate secrets config to each deployment environment. Keep preview deployments on a separate Neon branch and Clerk development instance. The normal build command is `npm run build`; the platform injects the synced variables. Apply migrations separately before releasing code that depends on them.
 
@@ -75,7 +76,19 @@ For another host, inject a scoped Doppler service token through that platform's 
 
 ## Dependency maintenance
 
-The framework and runtime were upgraded to Next.js 16.4.5 and Node.js 26.13.0, with stable React and TypeScript compilers. The dependency audit still reports low, moderate, and high advisories in the retained toolchain and transitive packages (including Zod, Jest, and Drizzle Kit). Run `npm audit` when adopting this starter; resolving the remaining findings requires a separate dependency review. No critical findings remained at the time of this migration.
+All direct packages use their current stable release lines. Major dependency updates include tRPC 11, TanStack React Query 5, Zod 4, Tailwind CSS 4, ESLint 10, Prettier 3, and Vitest 5. Tailwind 4 uses `@tailwindcss/postcss` and CSS theme configuration in `src/styles/globals.css`; its bundled CSS processing replaces the separate Autoprefixer dependency.
+
+`npm audit` reports **zero vulnerabilities**, including development dependencies, after a clean install of the committed lockfile. Run `npm ci` and `npm audit` to reproduce the result. Audit results describe advisories known at the time of the check; CI runs the audit so new reports are visible.
+
+The test suite moved from Jest to Vitest because the latest Jest release still depends on `deepmerge` 4.3.1, which has no published patched stable release for [GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4). The suite retains ownership and error handling coverage and adds an HTTP test for tRPC serialization, anonymous rejection, and Zod request validation. Frontend tests can opt into the installed jsdom environment with `// @vitest-environment jsdom`.
+
+The `overrides` in `package.json` address remaining upstream constraints without suppressing audit results:
+
+- Affected Minimatch 7–11.0.0 dependencies resolve to patched 11.0.5. Older unaffected Minimatch consumers keep their original API.
+- Drizzle Kit's legacy `@esbuild-kit/core-utils` loader uses patched esbuild 0.28.2 instead of vulnerable 0.18.20. Migration generation is checked against this override.
+- Three ESLint plugins (`import`, `jsx-a11y`, and `react`) still declare peer ranges ending at ESLint 9. Their scoped peer overrides select the project's stable ESLint 10; the complete project lint check verifies this configuration. Remove these peer overrides once upstream declares ESLint 10 support.
+
+TypeScript's compatibility aliases remain as described above: the project uses stable TypeScript 7 for compilation and Microsoft's TypeScript 6 API package for tools that still need it. No preview compiler or test-runner releases are used.
 
 ## References
 
