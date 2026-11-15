@@ -16,7 +16,12 @@ const admin = new Pool({
   connectionString:
     process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL,
   max: 1,
+  connectionTimeoutMillis: 15000,
+  query_timeout: 30000,
 });
+// Driver idle errors can contain connection configuration. Queries still reject
+// normally, but never dump that configuration into public Actions logs.
+admin.on("error", () => {});
 admin.on("error", () => {});
 let scoped;
 try {
@@ -25,7 +30,13 @@ try {
     process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL,
   );
   url.searchParams.set("options", `-c search_path=${schemaName}`);
-  scoped = new Pool({ connectionString: url.toString(), max: 1 });
+  scoped = new Pool({
+    connectionString: url.toString(),
+    max: 1,
+    connectionTimeoutMillis: 15000,
+    query_timeout: 30000,
+  });
+  scoped.on("error", () => {});
   scoped.on("error", () => {});
   for (const file of (await readdir("drizzle"))
     .filter((f) => /^\d+.*\.sql$/.test(f))
@@ -60,15 +71,21 @@ try {
   process.exitCode = await new Promise((resolve) =>
     child.on("exit", (code) => resolve(code ?? 1)),
   );
-} catch (error) {
+} catch {
   console.error(
-    "E2E setup failed:",
-    error instanceof Error ? error.message : "Database transport error",
+    "E2E setup failed; database or browser verification could not complete.",
   );
   process.exitCode = 1;
 } finally {
   await scoped?.end();
-  await admin.query(`drop schema if exists "${schemaName}" cascade`);
+  try {
+    await admin.query(`drop schema if exists "${schemaName}" cascade`);
+    console.log("Disposable E2E schema removed.");
+  } catch {
+    console.error(
+      "Disposable E2E schema cleanup failed; operator cleanup is required.",
+    );
+    process.exitCode = 1;
+  }
   await admin.end();
-  console.log("Disposable E2E schema removed.");
 }

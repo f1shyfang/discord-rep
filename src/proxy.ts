@@ -12,7 +12,9 @@ export default clerkMiddleware(
       "Content-Security-Policy",
       "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
     );
-    response.headers.set("Cache-Control", "private, no-store");
+    // Proxy headers may replace a route's headers. Preserve SSE's no-transform
+    // guarantee so compression/CDN transforms cannot buffer live event hints.
+    response.headers.set("Cache-Control", "private, no-store, no-transform");
     return response;
   },
   () => ({

@@ -20,6 +20,7 @@ import {
 } from "@playwright/test";
 
 test.describe("multi-user community and DM journeys", () => {
+  const liveUpdateTimeout = process.env.CI ? 20000 : 8000;
   const suffix = randomUUID().slice(0, 8);
   const accounts: {
     id: string;
@@ -238,7 +239,7 @@ test.describe("multi-user community and DM journeys", () => {
         .click();
       await expect(
         results.getByText("No messages found.", { exact: true }),
-      ).toBeVisible({ timeout: 8000 });
+      ).toBeVisible({ timeout: liveUpdateTimeout });
       await a.page.getByRole("button", { name: "Clear", exact: true }).click();
       // A cold deep link must retain the persisted unread boundary while the
       // separately requested sidebar summaries are still loading.
@@ -267,7 +268,7 @@ test.describe("multi-user community and DM journeys", () => {
       await b.page.goto(channelUrl);
       await expect(
         b.page.getByText("New messages", { exact: true }),
-      ).toBeVisible({ timeout: 8000 });
+      ).toBeVisible({ timeout: liveUpdateTimeout });
       await outsider.page.goto(channelUrl);
       await expect(
         outsider.page.getByRole("heading", {
@@ -335,7 +336,7 @@ test.describe("multi-user community and DM journeys", () => {
           name: "Message Test member",
           exact: true,
         }),
-      ).toBeDisabled({ timeout: 8000 });
+      ).toBeDisabled({ timeout: liveUpdateTimeout });
       await expect(
         a.page
           .getByRole("log")
@@ -469,7 +470,7 @@ test.describe("multi-user community and DM journeys", () => {
       expect(response.status()).toBe(200);
       await expect(
         b.page.getByRole("log").getByText("Deleted user", { exact: true }),
-      ).toBeVisible({ timeout: 8000 });
+      ).toBeVisible({ timeout: liveUpdateTimeout });
       expect(
         (
           await member.servers.get.query({

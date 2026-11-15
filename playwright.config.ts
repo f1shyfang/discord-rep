@@ -3,7 +3,9 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
   workers: 1,
-  timeout: 120000,
+  // Functional CI runs may be far from the Sydney database. Keep the explicit
+  // load smoke's latency threshold separate from this end-to-end journey budget.
+  timeout: process.env.CI ? 300000 : 120000,
   expect: { timeout: 20000 },
   reporter: "list",
   use: {
