@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - run: apt-get update && apt-get install -y --no-install-recommends gnupg ca-certificates
+      - run: apt-get update && apt-get install -y --no-install-recommends gnupg ca-certificates libatomic1
       - run: node scripts/backup-database.mjs
         env:
           DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
