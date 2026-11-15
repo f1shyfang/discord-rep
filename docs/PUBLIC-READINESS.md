@@ -19,3 +19,14 @@ below rather than inferred from a successful build.
 Keep the release to a small text-chat beta until the remaining gates are resolved.
 Voice and file uploads/scanning remain deferred. See [operations](OPERATIONS.md)
 for monitoring, privileges, encryption keys, recovery and rollback procedures.
+
+Verification runs from 15 November 2026:
+[CI](https://github.com/f1shyfang/discord-rep/actions/runs/43695372750),
+[browser and accessibility](https://github.com/f1shyfang/discord-rep/actions/runs/43695408659),
+[encrypted backup](https://github.com/f1shyfang/discord-rep/actions/runs/43694925064),
+[deployment health](https://github.com/f1shyfang/discord-rep/actions/runs/43694642122),
+and [maintenance](https://github.com/f1shyfang/discord-rep/actions/runs/43694647979)
+all passed. The SQL/unit suite passed 68 tests. Live production smoke checks used
+real Clerk deletion deliveries; synthetic accounts were removed and their test
+communities were soft-deleted after verification. The 30-read development load
+smoke had zero errors, six concurrent streams and p95 latency of 481 ms.
