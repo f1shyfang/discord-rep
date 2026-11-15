@@ -1,5 +1,6 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import Head from "next/head";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { api } from "~/utils/api";
@@ -9,6 +10,13 @@ import { Friends } from "./Friends";
 import { Conversation } from "./Conversation";
 import { ServerSettings } from "./ServerSettings";
 import { P } from "~/server/chat/permissions";
+
+const serverInitials = (name: string) =>
+  name
+    .split(/\s+/)
+    .map((word) => word[0])
+    .join("")
+    .slice(0, 3);
 
 export function Workspace({ profile }: { profile: Profile }) {
   const router = useRouter();
@@ -102,6 +110,14 @@ export function Workspace({ profile }: { profile: Profile }) {
     <div
       className={`chat-app theme-${profile.theme} ${navOpen ? "nav-open" : ""} ${membersOpen ? "members-open" : ""}`}
     >
+      <Head>
+        <title>
+          {home
+            ? (dm?.user.displayName ?? "Friends")
+            : (channel?.name ?? detail.data?.server.name ?? "Community")}{" "}
+          — Gather
+        </title>
+      </Head>
       <a className="skip-link" href="#conversation">
         Skip to conversation
       </a>
@@ -110,7 +126,7 @@ export function Workspace({ profile }: { profile: Profile }) {
           className={`server-icon home-icon ${home ? "selected" : ""}`}
           href="/channels/@me"
           title="Home"
-          aria-label="Home"
+          aria-label="Home g."
           aria-current={home ? "page" : undefined}
           onClick={() => {
             setNavOpen(true);
@@ -125,7 +141,7 @@ export function Workspace({ profile }: { profile: Profile }) {
             key={server.id}
             className={`server-icon ${server.id === serverId ? "selected" : ""}`}
             href={`/channels/${server.id}`}
-            aria-label={server.name}
+            aria-label={`${server.name} ${serverInitials(server.name)}`}
             title={server.name}
             aria-current={server.id === serverId ? "page" : undefined}
             onClick={() => {
@@ -133,11 +149,7 @@ export function Workspace({ profile }: { profile: Profile }) {
               setDialog(null);
             }}
           >
-            {server.name
-              .split(/\s+/)
-              .map((s) => s[0])
-              .join("")
-              .slice(0, 3)}
+            {serverInitials(server.name)}
           </Link>
         ))}
         <button
@@ -332,7 +344,7 @@ export function Workspace({ profile }: { profile: Profile }) {
           <span className="header-spacer" />
           {!home && (
             <button
-              aria-label="Toggle member list"
+              aria-label="Members"
               aria-expanded={membersOpen}
               onClick={() => setMembersOpen((v) => !v)}
             >

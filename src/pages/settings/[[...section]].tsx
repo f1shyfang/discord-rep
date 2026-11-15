@@ -4,6 +4,7 @@ import { AuthGate, ProfileForm } from "~/components/chat/AuthGate";
 import { useRouter } from "next/router";
 import { api } from "~/utils/api";
 import { useClerk } from "@clerk/nextjs";
+import Head from "next/head";
 export default function Settings() {
   const router = useRouter();
   const [dirty, setDirty] = useState(false);
@@ -22,6 +23,9 @@ export default function Settings() {
     <AuthGate>
       {(profile) => (
         <main className={`settings-page theme-${profile.theme}`}>
+          <Head>
+            <title>Account settings — Gather</title>
+          </Head>
           <Link
             href="/channels/@me"
             onClick={(e) => {

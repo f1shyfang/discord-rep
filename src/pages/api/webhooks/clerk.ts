@@ -68,6 +68,7 @@ export default async function clerkWebhook(
     );
     res.status(200).end();
   } catch {
+    console.error(JSON.stringify({ event: "clerk_webhook_processing_failed" }));
     res.status(503).end();
   }
 }

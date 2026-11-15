@@ -1,8 +1,20 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
 // Public pages stay accessible; tRPC protectedProcedure enforces authentication.
 export default clerkMiddleware(
-  () => {},
+  () => {
+    const response = NextResponse.next();
+    response.headers.set("X-Content-Type-Options", "nosniff");
+    response.headers.set("Referrer-Policy", "no-referrer");
+    response.headers.set("X-Frame-Options", "DENY");
+    response.headers.set(
+      "Content-Security-Policy",
+      "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+    );
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
+  },
   () => ({
     // Read bindings per request: Worker secrets are unavailable at module load.
     authorizedParties:

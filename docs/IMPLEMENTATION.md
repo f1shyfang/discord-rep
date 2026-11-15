@@ -48,7 +48,7 @@ deferred during implementation. These features are not simulated by the UI.
    `.env.local`. Runtime `DATABASE_URL` supports the pooled Neon URL. Migrations
    need `DIRECT_DATABASE_URL` (the existing `DATABASE_URL_UNPOOLED` secret is also accepted as the
    equivalent direct URL).
-3. Review `drizzle/0001` through `0004`, then run `npm run db:migrate` against the
+3. Review `drizzle/0001` through `0005`, then run `npm run db:migrate` against the
    intended development branch. The deployed database has migrations `0000`–`0004`
    applied; automated browser tests use isolated disposable schemas.
    Migration `0001` includes a deferred owner-membership constraint and orders
@@ -102,8 +102,8 @@ three-user community, invitations, persisted chat, edits, disconnection recovery
 mobile overflow, private DM blocking, outsiders and channel access revocation.
 One client uses event streaming and another deliberately uses the polling fallback.
 The `chat-browser` Actions workflow is manual and reads these secrets from the
-`chat-e2e` environment. Browser traces can contain private test-session data; failure
-artifacts expire after three days and should remain private.
+`chat-e2e` environment. Browser traces can contain private test-session data. They stay local and are not
+uploaded as artifacts to this public repository.
 
 CI runs the PostgreSQL integration suite against a PostgreSQL 18 service, alongside
 lint, typecheck, unit tests, audit and production compilation. Integration tests
@@ -232,3 +232,11 @@ administrator succession, read-only archives and reconciliation of previously
 disabled accounts. The user-selected policy and verification details are in
 [ACCOUNT-LIFECYCLE.md](ACCOUNT-LIFECYCLE.md). Alert and support destinations were
 explicitly deferred; they remain launch gates.
+
+## Operational hardening — 15 November 2026
+
+Restricted runtime and backup roles, encrypted backup/restore procedures,
+sanitized error logging, deployment probes, scheduled browser verification and
+automated accessibility checks are described in [OPERATIONS.md](OPERATIONS.md).
+[PUBLIC-READINESS.md](PUBLIC-READINESS.md) tracks the evidence and remaining gates;
+alert/support destinations were deferred by the user.

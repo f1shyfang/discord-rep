@@ -55,3 +55,4 @@ yarn-error.log*
 # Browser verification artifacts
 /playwright-report/
 /test-results/
+/backups/

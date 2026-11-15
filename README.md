@@ -180,3 +180,9 @@ TypeScript's compatibility aliases remain as described above: the project uses s
 
 See the [account deletion and community archive policy](docs/ACCOUNT-LIFECYCLE.md)
 for retained history, administrator succession and deletion behavior.
+
+Public launch gates and verification evidence are tracked in
+[PUBLIC-READINESS.md](docs/PUBLIC-READINESS.md); maintenance and recovery procedures
+are in [OPERATIONS.md](docs/OPERATIONS.md). Use `npm run check:deployment` for public
+HTTPS probes and `npm run test:load` for the explicit disposable development load
+smoke. Neither command establishes the full 1,000-client capacity target.

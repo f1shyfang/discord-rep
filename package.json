@@ -8,7 +8,7 @@
     "db:push": "doppler run -- drizzle-kit push",
     "db:studio": "doppler run -- drizzle-kit studio",
     "dev": "next dev",
-    "lint": "eslint .",
+    "lint": "eslint src __tests__ e2e scripts \"*.{ts,mts,mjs,js}\" --no-warn-ignored",
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -25,7 +25,11 @@
     "deploy:vinext": "vinext-cloudflare deploy",
     "test:e2e": "node --env-file-if-exists=.env.local scripts/run-e2e.mjs",
     "test:integration": "vitest run __tests__/chat.integration.test.ts",
-    "chat:cleanup": "doppler run -- node scripts/cleanup-chat.mjs"
+    "chat:cleanup": "doppler run -- node scripts/cleanup-chat.mjs",
+    "test:load": "node --env-file-if-exists=.env.local scripts/run-e2e.mjs --load-smoke",
+    "check:deployment": "node scripts/check-deployment.mjs",
+    "db:backup": "node scripts/backup-database.mjs",
+    "db:reconcile-restored": "node scripts/reconcile-restored-identities.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1164.0",
@@ -48,6 +52,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@clerk/backend": "^3.27.0",
     "@clerk/testing": "^2.2.55",
     "@cloudflare/vite-plugin": "^2.0.0-beta.v.12",

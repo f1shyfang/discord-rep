@@ -36,13 +36,18 @@ try {
   await scoped.end();
   scoped = undefined;
   console.log("E2E migrations applied to a disposable Neon schema.");
+  const loadOnly = process.argv.includes("--load-smoke");
   const child = spawn(
     "node_modules/.bin/playwright",
-    ["test", ...process.argv.slice(2)],
+    loadOnly
+      ? ["test", "--grep", "bounded concurrency"]
+      : ["test", ...process.argv.slice(2)],
     {
       stdio: "inherit",
       env: {
         ...process.env,
+        CHAT_LOAD_SMOKE: loadOnly ? "1" : process.env.CHAT_LOAD_SMOKE,
+        E2E_RUNTIME: loadOnly ? "vinext" : process.env.E2E_RUNTIME,
         DATABASE_URL: url.toString(),
         DIRECT_DATABASE_URL: url.toString(),
         CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,

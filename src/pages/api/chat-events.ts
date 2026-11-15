@@ -92,6 +92,8 @@ export default async function chatEvents(
         "NOT_FOUND",
         "PRECONDITION_FAILED",
       ].includes(error.code);
+    if (!revoked && !closed)
+      console.error(JSON.stringify({ event: "event_stream_failed" }));
     if (!closed && initialized && revoked)
       res.write("event: revoked\ndata: {}\n\n");
     else if (!closed && !initialized) res.status(revoked ? 404 : 503);

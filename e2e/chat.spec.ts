@@ -1,6 +1,7 @@
+import AxeBuilder from "@axe-core/playwright";
 import { P } from "../src/server/chat/permissions";
 import { Webhook } from "standardwebhooks";
-import { createTRPCClient, httpBatchLink } from "@trpc/client";
+import { createTRPCClient, httpBatchLink, httpLink } from "@trpc/client";
 import superjson from "superjson";
 import type { AppRouter } from "~/server/api/root";
 import { randomUUID } from "node:crypto";
@@ -38,6 +39,7 @@ test.describe("multi-user community and DM journeys", () => {
       "outsider",
       "lifecycleowner",
       "lifecyclemember",
+      ...(process.env.CHAT_LOAD_SMOKE === "1" ? ["loadowner"] : []),
     ]) {
       const email = `gather_${role}_${suffix}+clerk_test@example.com`;
       const user = await backend.users.createUser({
@@ -55,6 +57,19 @@ test.describe("multi-user community and DM journeys", () => {
   test.afterAll(async () => {
     for (const account of accounts) await backend.users.deleteUser(account.id);
   });
+  async function checkAccessibility(page: Page) {
+    const result = await new AxeBuilder({ page })
+      .exclude("nextjs-portal")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    expect(
+      result.violations.map((v) => ({
+        id: v.id,
+        impact: v.impact,
+        targets: v.nodes.flatMap((n) => n.target),
+      })),
+    ).toEqual([]);
+  }
   async function signIn(
     browser: Browser,
     index: number,
@@ -69,6 +84,7 @@ test.describe("multi-user community and DM journeys", () => {
     const page = await context.newPage();
     await setupClerkTestingToken({ page });
     await page.goto("/channels/@me");
+    if (index === 0) await checkAccessibility(page);
     await clerk.signIn({ page, emailAddress: accounts[index]!.email });
     await page.reload();
     await expect(
@@ -82,10 +98,10 @@ test.describe("multi-user community and DM journeys", () => {
     ).toBeVisible();
     return { page, context };
   }
-  function browserApi(page: Page) {
+  function browserApi(page: Page, batch = true) {
     return createTRPCClient<AppRouter>({
       links: [
-        httpBatchLink({
+        (batch ? httpBatchLink : httpLink)({
           url: "http://localhost:3107/api/trpc",
           transformer: superjson,
           fetch: async (url, init) => {
@@ -130,11 +146,11 @@ test.describe("multi-user community and DM journeys", () => {
         a.page.getByRole("heading", { name: "general", exact: true }),
       ).toBeVisible();
       await streamReady;
-      await a.page.getByRole("button", { name: "Toggle member list" }).click();
+      await a.page.getByRole("button", { name: "Members" }).click();
       await expect(
         a.page.getByRole("complementary", { name: "Members", exact: true }),
       ).toBeVisible();
-      await a.page.getByRole("button", { name: "Toggle member list" }).click();
+      await a.page.getByRole("button", { name: "Members" }).click();
       await expect(
         a.page.getByRole("complementary", { name: "Members", exact: true }),
       ).toHaveCount(0);
@@ -418,6 +434,7 @@ test.describe("multi-user community and DM journeys", () => {
         });
       }
       await a.page.goto("/settings/profile");
+      await checkAccessibility(a.page);
       await expect(
         a.page.getByRole("heading", { name: "Delete your account" }),
       ).toBeVisible();
@@ -478,12 +495,14 @@ test.describe("multi-user community and DM journeys", () => {
       await expect(
         b.page.getByRole("textbox", { name: "Message general", exact: true }),
       ).toBeDisabled();
+      await checkAccessibility(b.page);
       await b.page.setViewportSize({ width: 390, height: 844 });
       expect(
         await b.page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,
         ),
       ).toBe(true);
+      await checkAccessibility(b.page);
       await b.page.screenshot({
         path: testInfo.outputPath("archived-mobile.png"),
         fullPage: true,
@@ -491,6 +510,105 @@ test.describe("multi-user community and DM journeys", () => {
     } finally {
       await a.context.close();
       await b.context.close();
+    }
+  });
+  test("bounded concurrency and streaming load smoke", async ({
+    browser,
+  }, testInfo) => {
+    test.skip(
+      process.env.CHAT_LOAD_SMOKE !== "1",
+      "Run the explicit development load smoke separately.",
+    );
+    const a = await signIn(browser, 5);
+    const client = browserApi(a.page, false);
+    const samples: number[] = [],
+      errors: string[] = [];
+    const aborters: AbortController[] = [];
+    try {
+      const created = await client.servers.create.mutate({
+        name: "Bounded load smoke",
+        requestId: randomUUID(),
+      });
+      const detail = await client.servers.get.query({
+        serverId: created.server.id,
+      });
+      const conversationId = detail.channels.find(
+        (c) => c.kind === "text",
+      )!.conversationId!;
+      await client.messages.send.mutate({
+        conversationId,
+        clientNonce: randomUUID(),
+        body: "Development load fixture",
+      });
+      const cookies = (await a.context.cookies("http://localhost:3107"))
+        .map((c) => `${c.name}=${c.value}`)
+        .join("; ");
+      const streams = Array.from({ length: 6 }, async () => {
+        const controller = new AbortController();
+        aborters.push(controller);
+        const timer = setTimeout(() => controller.abort(), 10000);
+        let ready = false;
+        try {
+          const r = await fetch(
+            `http://localhost:3107/api/chat-events?conversationId=${conversationId}`,
+            { headers: { cookie: cookies }, signal: controller.signal },
+          );
+          if (r.status !== 200 || !r.body) return false;
+          const reader = r.body.getReader();
+          let text = "";
+          while (!ready) {
+            const part = await reader.read();
+            if (part.done) break;
+            text += new TextDecoder().decode(part.value);
+            ready = text.includes("event: ready");
+          }
+          await new Promise((resolve) => setTimeout(resolve, 4000));
+          await reader.cancel();
+          return ready;
+        } catch {
+          return ready;
+        } finally {
+          clearTimeout(timer);
+          controller.abort();
+        }
+      });
+      await Promise.all(
+        Array.from({ length: 10 }, async () => {
+          for (let round = 0; round < 3; round++) {
+            const start = performance.now();
+            try {
+              const page = await client.messages.list.query({ conversationId });
+              if (page.items.length !== 1) errors.push("incorrect_history");
+            } catch (e) {
+              errors.push(e instanceof Error ? e.name : "request_failure");
+            }
+            samples.push(performance.now() - start);
+          }
+        }),
+      );
+      const connected = (await Promise.all(streams)).filter(Boolean).length;
+      samples.sort((a, b) => a - b);
+      const report = {
+        requestFlows: 10,
+        requests: samples.length,
+        concurrentStreams: connected,
+        errors: errors.length,
+        p95Milliseconds: Math.round(
+          samples[Math.ceil(samples.length * 0.95) - 1]!,
+        ),
+        maxMilliseconds: Math.round(samples.at(-1)!),
+      };
+      console.log("Development load smoke:", JSON.stringify(report));
+      await testInfo.attach("load-summary", {
+        body: JSON.stringify(report),
+        contentType: "application/json",
+      });
+      expect(errors).toEqual([]);
+      expect(connected).toBe(6);
+      expect(report.p95Milliseconds).toBeLessThan(2000);
+    } finally {
+      for (const a of aborters) a.abort();
+      await a.context.close();
     }
   });
 });

@@ -6,6 +6,13 @@ export default defineConfig({
     entrypoint: "vinext/server/fetch-handler",
     compatibilityDate: "2026-11-08",
     compatibilityFlags: ["nodejs_compat"],
+    observability: {
+      enabled: true,
+      redactQueryString: true,
+      // Invocation URLs can contain invitation tokens. Persist only our
+      // deliberately sanitized console events, with no request bodies or URLs.
+      logs: { enabled: true, invocationLogs: false, persist: true },
+    },
     domains: ["discord.michaelfeng.me"],
     assets: {
       htmlHandling: "none",

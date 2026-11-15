@@ -1,0 +1,21 @@
+name: Deployment health
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+permissions:
+  contents: read
+concurrency:
+  group: deployment-health
+  cancel-in-progress: true
+jobs:
+  probe:
+    if: github.event_name == 'workflow_dispatch' || vars.DEPLOYMENT_HEALTH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: node scripts/check-deployment.mjs

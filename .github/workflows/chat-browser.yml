@@ -1,12 +1,16 @@
 name: Chat browser verification
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "43 2 * * *"
 permissions:
   contents: read
 jobs:
   browser:
+    if: github.event_name == 'workflow_dispatch' || vars.CHAT_BROWSER_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment: chat-e2e
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,9 +25,5 @@ jobs:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: browser-failure
-          path: test-results/
-          retention-days: 3
+      # This repository is public. Traces/screenshots can contain authenticated
+      # sessions; keep them local rather than uploading public Actions artifacts.

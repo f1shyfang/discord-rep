@@ -33,7 +33,8 @@ original Clerk user identifier remains in a permanent revocation record so old
 sessions and delayed deliveries cannot restore access. Moderation audit records
 remain as security history with an anonymized actor. This policy does not promise
 to erase personal information written into message bodies, moderation reasons or
-other members' content. Backups have a separate retention period; a restore must
+other members' content. Daily encrypted backup artifacts have seven-day retention, alongside Neon's
+six-hour point-in-time history. A restore must
 replay subsequent deletion events before serving users again.
 
 Chat uploads and custom avatar/icon uploads remain deferred. This policy makes no
