@@ -106,6 +106,7 @@ it("restores the persisted unread boundary when history and sidebar summaries ar
     eventSeq: "2",
     before: null,
     lastReadSeq: "1",
+    archived: false,
   };
   harness.data = { pages: [page] };
   rerender(

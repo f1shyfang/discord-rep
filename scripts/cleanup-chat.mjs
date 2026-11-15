@@ -15,6 +15,11 @@ try {
     "utf8",
   );
   client = await pool.connect();
+  // Reconcile identities disabled by an earlier deployment or a replayed event.
+  // Commit this separately: lifecycle erasure acquires its lock before any purge
+  // row locks and should not block all authenticated requests during a large purge.
+  await client.query(`select delete_chat_account(clerk_id) from app_users
+    where disabled_at is not null and clerk_id not like 'deleted:%'`);
   await client.query("begin");
   await client.query(maintenance);
   await client.query("commit");

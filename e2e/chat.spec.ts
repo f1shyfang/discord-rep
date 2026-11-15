@@ -1,3 +1,5 @@
+import { P } from "../src/server/chat/permissions";
+import { Webhook } from "standardwebhooks";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import superjson from "superjson";
 import type { AppRouter } from "~/server/api/root";
@@ -30,7 +32,13 @@ test.describe("multi-user community and DM journeys", () => {
       throw new Error("Development Clerk keys required.");
     await clerkSetup();
     backend = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
-    for (const role of ["owner", "member", "outsider"]) {
+    for (const role of [
+      "owner",
+      "member",
+      "outsider",
+      "lifecycleowner",
+      "lifecyclemember",
+    ]) {
       const email = `gather_${role}_${suffix}+clerk_test@example.com`;
       const user = await backend.users.createUser({
         emailAddress: [email],
@@ -355,6 +363,134 @@ test.describe("multi-user community and DM journeys", () => {
       ).toHaveCount(0);
     } finally {
       await Promise.allSettled(contexts.map((context) => context.close()));
+    }
+  });
+  test("erases deleted profiles, transfers administrators and preserves read-only archives", async ({
+    browser,
+  }, testInfo) => {
+    const a = await signIn(browser, 3);
+    const b = await signIn(browser, 4);
+    try {
+      const owner = browserApi(a.page),
+        member = browserApi(b.page);
+      const memberProfile = (await member.users.me.query())!;
+      const communities = [];
+      for (const [index, name] of [
+        "Continuing community",
+        "Archived community",
+      ].entries()) {
+        const c = await owner.servers.create.mutate({
+          name,
+          requestId: randomUUID(),
+        });
+        const invite = await owner.invites.create.mutate({
+          serverId: c.server.id,
+          requestId: randomUUID(),
+          expiresInSeconds: 3600,
+          maxUses: null,
+        });
+        await member.invites.accept.mutate({ token: invite.token! });
+        const detail = await owner.servers.get.query({ serverId: c.server.id });
+        const channel = detail.channels.find((ch) => ch.kind === "text")!;
+        if (index === 0) {
+          const role = await owner.moderation.roleSave.mutate({
+            serverId: c.server.id,
+            name: "Administrator",
+            permissions: P.ADMINISTRATOR,
+            position: 1,
+          });
+          await owner.moderation.roleAssign.mutate({
+            serverId: c.server.id,
+            userId: memberProfile.id,
+            roleId: role.id,
+            assigned: true,
+          });
+        }
+        await owner.messages.send.mutate({
+          conversationId: channel.conversationId!,
+          clientNonce: randomUUID(),
+          body: "History survives account deletion",
+        });
+        communities.push({
+          ...c,
+          conversationId: channel.conversationId!,
+          url: `/channels/${c.server.id}/${channel.id}`,
+        });
+      }
+      await a.page.goto("/settings/profile");
+      await expect(
+        a.page.getByRole("heading", { name: "Delete your account" }),
+      ).toBeVisible();
+      await expect(
+        a.page.getByText(
+          "In account settings, open Security → Delete account. Clerk will ask you to confirm.",
+        ),
+      ).toBeVisible();
+      await b.page.goto(communities[0]!.url);
+      await expect(
+        b.page
+          .getByRole("log")
+          .getByText("Test lifecycleowner", { exact: true }),
+      ).toBeVisible();
+      const body = JSON.stringify({
+        type: "user.deleted",
+        data: { id: accounts[3]!.id, deleted: true, object: "user" },
+      });
+      const delivery = randomUUID(),
+        now = new Date();
+      const response = await b.page.request.post("/api/webhooks/clerk", {
+        data: body,
+        headers: {
+          "content-type": "application/json",
+          "svix-id": delivery,
+          "svix-timestamp": String(Math.floor(now.getTime() / 1000)),
+          "svix-signature": new Webhook(
+            process.env.CLERK_WEBHOOK_SIGNING_SECRET!,
+          ).sign(delivery, now, body),
+        },
+      });
+      expect(response.status()).toBe(200);
+      await expect(
+        b.page.getByRole("log").getByText("Deleted user", { exact: true }),
+      ).toBeVisible({ timeout: 8000 });
+      expect(
+        (
+          await member.servers.get.query({
+            serverId: communities[0]!.server.id,
+          })
+        ).server.ownerId,
+      ).toBe(memberProfile.id);
+      await expect(
+        b.page.getByRole("textbox", { name: "Message general", exact: true }),
+      ).toBeEnabled();
+      await expect(owner.users.me.query()).rejects.toMatchObject({
+        data: { code: "UNAUTHORIZED" },
+      });
+      await b.page.goto(communities[1]!.url);
+      await expect(
+        b.page.getByText(/Archived community. The owner deleted their account/),
+      ).toBeVisible();
+      await expect(
+        b.page
+          .getByRole("log")
+          .getByText("History survives account deletion", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        b.page.getByRole("textbox", { name: "Message general", exact: true }),
+      ).toBeDisabled();
+      await b.page.setViewportSize({ width: 390, height: 844 });
+      expect(
+        await b.page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      await b.page.screenshot({
+        path: testInfo.outputPath("archived-mobile.png"),
+        fullPage: true,
+      });
+    } finally {
+      await a.context.close();
+      await b.context.close();
     }
   });
 });

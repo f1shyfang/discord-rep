@@ -56,15 +56,13 @@ export const serversRouter = createTRPCRouter({
       await ctx.tx
         .insert(s.serverMembers)
         .values({ serverId: server!.id, userId: ctx.actor.id });
-      await ctx.tx
-        .insert(s.roles)
-        .values({
-          serverId: server!.id,
-          name: "everyone",
-          position: 0,
-          isEveryone: true,
-          permissions: DEFAULT_PERMISSIONS,
-        });
+      await ctx.tx.insert(s.roles).values({
+        serverId: server!.id,
+        name: "everyone",
+        position: 0,
+        isEveryone: true,
+        permissions: DEFAULT_PERMISSIONS,
+      });
       const [category] = await ctx.tx
         .insert(s.categories)
         .values({ serverId: server!.id, name: "Text channels" })
@@ -78,14 +76,12 @@ export const serversRouter = createTRPCRouter({
           kind: "text",
         })
         .returning();
-      await ctx.tx
-        .insert(s.channels)
-        .values({
-          serverId: server!.id,
-          name: "Lounge",
-          kind: "voice",
-          position: 1,
-        });
+      await ctx.tx.insert(s.channels).values({
+        serverId: server!.id,
+        name: "Lounge",
+        kind: "voice",
+        position: 1,
+      });
       await ctx.tx.insert(s.conversations).values({ channelId: general!.id });
       await remember(
         ctx.tx,
@@ -109,7 +105,12 @@ export const serversRouter = createTRPCRouter({
       .select({ user: s.appUsers })
       .from(s.appUsers)
       .innerJoin(s.serverMembers, eq(s.serverMembers.userId, s.appUsers.id))
-      .where(eq(s.serverMembers.serverId, input.serverId))
+      .where(
+        and(
+          eq(s.serverMembers.serverId, input.serverId),
+          sql`${s.appUsers.disabledAt} is null`,
+        ),
+      )
       .orderBy(s.appUsers.displayName)
       .limit(1000);
     const memberRoles = await ctx.tx
@@ -172,6 +173,16 @@ export const serversRouter = createTRPCRouter({
           ),
         );
       if (!member) fail("NOT_FOUND", "Member unavailable.");
+      const [successor] = await ctx.tx
+        .select()
+        .from(s.appUsers)
+        .where(
+          and(
+            eq(s.appUsers.id, input.userId),
+            sql`${s.appUsers.disabledAt} is null`,
+          ),
+        );
+      if (!successor) fail("NOT_FOUND", "Member unavailable.");
       await ctx.tx
         .update(s.servers)
         .set({
@@ -186,6 +197,7 @@ export const serversRouter = createTRPCRouter({
       ctx.tx,
       ctx.actor,
       input.serverId,
+      true,
       true,
     );
     if (server.ownerId === ctx.actor.id)

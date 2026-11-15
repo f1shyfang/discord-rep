@@ -64,6 +64,7 @@ export const messagesRouter = createTRPCRouter({
       items: await messageDTOs(ctx.tx, ctx.actor, rows.reverse()),
       before: hasMore ? rows[0]!.seq.toString() : null,
       permissions: access.permissions,
+      archived: access.archived,
       lastReadSeq: read?.lastReadSeq.toString() ?? "0",
       latestSeq: snapshot!.lastMessageSeq.toString(),
       eventSeq: snapshot!.lastEventSeq.toString(),
@@ -206,12 +207,14 @@ export const messagesRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const { message, permissions } = await messageForAction(
+      const { message, permissions, archived } = await messageForAction(
         ctx.tx,
         ctx.actor,
         input.messageId,
         P.VIEW_CHANNEL,
       );
+      if (archived)
+        fail("FORBIDDEN", "This community is archived and read-only.");
       if (
         message.authorId !== ctx.actor.id &&
         !(permissions & P.MANAGE_MESSAGES)
@@ -475,6 +478,8 @@ export const syncRouter = createTRPCRouter({
         .orderBy(s.outboxEvents.eventSeq)
         .limit(101);
       const hasMore = events.length > 100;
+      if (events.some((event) => event.eventType === "identity.deleted"))
+        fail("CONFLICT", "A profile changed. Reload this conversation.");
       if (hasMore) events.pop();
       const rows = events.length
         ? await ctx.tx

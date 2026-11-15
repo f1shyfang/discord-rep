@@ -559,15 +559,16 @@ export function Conversation({
                         {m.authorId === profile.id && canSend && (
                           <button onClick={() => startEdit(m)}>Edit</button>
                         )}
-                        {(m.authorId === profile.id ||
-                          !!(permissions & P.MANAGE_MESSAGES)) && (
-                          <button
-                            className="danger"
-                            onClick={() => setDeleting(m)}
-                          >
-                            Delete
-                          </button>
-                        )}
+                        {!pages[0]?.archived &&
+                          (m.authorId === profile.id ||
+                            !!(permissions & P.MANAGE_MESSAGES)) && (
+                            <button
+                              className="danger"
+                              onClick={() => setDeleting(m)}
+                            >
+                              Delete
+                            </button>
+                          )}
                       </div>
                     )}
                   </article>

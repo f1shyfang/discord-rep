@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { Pool } from "@neondatabase/serverless";
@@ -46,6 +46,9 @@ try {
         DATABASE_URL: url.toString(),
         DIRECT_DATABASE_URL: url.toString(),
         CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+        // Local signed deliveries exercise the real verifier without reusing any
+        // deployed endpoint's signing credential.
+        CLERK_WEBHOOK_SIGNING_SECRET: `whsec_${randomBytes(32).toString("base64")}`,
       },
     },
   );

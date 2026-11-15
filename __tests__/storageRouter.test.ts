@@ -5,6 +5,10 @@ import { getR2Storage, StorageNotConfiguredError } from "~/server/storage";
 import { createR2Client, R2Storage } from "~/server/storage/r2";
 
 vi.mock("~/server/db", () => ({ db: {} }));
+// Lifecycle rejection uses real SQL in chat.integration.test.ts; these tests isolate ownership.
+vi.mock("~/server/chat/procedure", async () => ({
+  identityProcedure: (await import("~/server/api/trpc")).protectedProcedure,
+}));
 vi.mock("~/env", () => ({ env: {} }));
 vi.mock("~/server/storage", async (importOriginal) => ({
   ...(await importOriginal<typeof import("~/server/storage")>()),

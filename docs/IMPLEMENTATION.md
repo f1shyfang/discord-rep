@@ -130,8 +130,9 @@ verification, deletion/revocation and purge rollback constraints.
   verification gates. Member lists currently use bounded snapshots;
   further friends/member pagination and virtualization is needed before claiming those scale targets.
 - Voice, file scanning and safe attachment/avatar/icon storage remain deferred.
-  Profile/account data retention and owner succession for deleted accounts need
-  an operational policy before a public release.
+  Account deletion and ownership succession follow the
+  [account lifecycle policy](ACCOUNT-LIFECYCLE.md). Alert/support destinations,
+  monitoring, recovery testing and the other release gates remain separate work.
 
 ## Verification record — 8 November 2026
 
@@ -223,3 +224,11 @@ rejection of the development credentials. Keep local experiments and automated
 browser tests on development; do not reset it from production with user data.
 Voice/uploads, load and latency budgets, full accessibility review, and
 backup/restore verification remain outside the verified scope.
+
+## Account lifecycle — 15 November 2026
+
+Migration `0005_account_lifecycle.sql` adds account anonymization, automatic
+administrator succession, read-only archives and reconciliation of previously
+disabled accounts. The user-selected policy and verification details are in
+[ACCOUNT-LIFECYCLE.md](ACCOUNT-LIFECYCLE.md). Alert and support destinations were
+explicitly deferred; they remain launch gates.

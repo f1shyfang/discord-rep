@@ -16,7 +16,12 @@ function ProfileGate({
 }: {
   children: (profile: Profile) => ReactNode;
 }) {
-  const me = api.users.me.useQuery(undefined, { retry: false });
+  const me = api.users.me.useQuery(undefined, {
+    // A transient database transport failure should recover without trapping
+    // an otherwise valid session on the profile gate. Never retry auth failures.
+    retry: (attempt, error) =>
+      attempt < 2 && error.data?.code === "INTERNAL_SERVER_ERROR",
+  });
   if (me.isPending)
     return (
       <div className="auth-screen" role="status">

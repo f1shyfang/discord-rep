@@ -53,6 +53,7 @@ export const servers = pgTable(
       .references(() => appUsers.id),
     name: text("name").notNull(),
     authRevision: integer("auth_revision").notNull().default(1),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: createdAt(),
   },

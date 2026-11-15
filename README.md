@@ -71,7 +71,7 @@ The standard `dev`, `build`, and `start` commands also work when a hosting platf
 
 Edit `src/server/db/schema.ts`, run `npm run db:generate`, inspect and commit the generated SQL and metadata in `drizzle/`, then run `npm run db:migrate` against an isolated Neon development branch. Use a direct URL for migrations and a pooled URL for runtime queries. Apply reviewed migrations to production in a controlled deployment step; builds do not run migrations automatically.
 
-This is a fresh starter schema. Migration `0000` creates posts and jobs; migrations `0001`–`0004` add the chat schema, presence, full-text index and identity revocation state. It does not migrate existing user accounts, sessions, or application records from an older installation. If adapting an existing app, plan a separate account and data migration before connecting a populated production database.
+This is a fresh starter schema. Migration `0000` creates posts and jobs; migrations `0001`–`0005` add chat, presence, search, identity revocation and account lifecycle handling. It does not migrate existing user accounts, sessions, or application records from an older installation. If adapting an existing app, plan a separate account and data migration before connecting a populated production database.
 
 ## Cloudflare R2 file storage
 
@@ -177,3 +177,6 @@ TypeScript's compatibility aliases remain as described above: the project uses s
 - [Drizzle and Neon](https://orm.drizzle.team/docs/connect-neon)
 - [Doppler CLI](https://docs.doppler.com/docs/cli)
 - [tRPC](https://trpc.io/docs)
+
+See the [account deletion and community archive policy](docs/ACCOUNT-LIFECYCLE.md)
+for retained history, administrator succession and deletion behavior.

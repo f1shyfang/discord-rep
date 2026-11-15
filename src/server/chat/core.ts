@@ -45,9 +45,9 @@ export const tokenHash = (token: string) =>
   createHash("sha256").update(token).digest("hex");
 export const userDTO = (u: Actor) => ({
   id: u.id,
-  handle: u.handle,
-  displayName: u.displayName,
-  bio: u.bio,
+  handle: u.disabledAt ? "deleted_user" : u.handle,
+  displayName: u.disabledAt ? "Deleted user" : u.displayName,
+  bio: u.disabledAt ? "" : u.bio,
 });
 export async function actorFor(tx: Tx, clerkId: string) {
   const [actor] = await tx
@@ -83,6 +83,7 @@ export async function serverAccess(
   actor: Actor,
   serverId: string,
   exclusive = false,
+  allowArchived = false,
 ) {
   const [server] = await tx
     .select()
@@ -109,6 +110,8 @@ export async function serverAccess(
       ),
     );
   if (!member || ban) fail("NOT_FOUND", "Server unavailable.");
+  if (exclusive && server.archivedAt && !allowArchived)
+    fail("FORBIDDEN", "This community is archived and read-only.");
   const roles = await tx
     .select()
     .from(s.roles)
@@ -135,7 +138,9 @@ export async function serverAccess(
     roles,
     assigned: input.assignedRoleIds,
     input,
-    permissions: permissionsFor(input),
+    permissions: server.archivedAt
+      ? permissionsFor(input) & P.VIEW_CHANNEL
+      : permissionsFor(input),
   };
 }
 export function requirePermission(bits: number, permission: number) {
@@ -165,7 +170,10 @@ export async function channelAccess(
     .select()
     .from(s.channelOverwrites)
     .where(eq(s.channelOverwrites.channelId, channelId));
-  const permissions = permissionsFor({ ...access.input, overwrites });
+  const effective = permissionsFor({ ...access.input, overwrites });
+  const permissions = access.server.archivedAt
+    ? effective & P.VIEW_CHANNEL
+    : effective;
   if (!(permissions & P.VIEW_CHANNEL))
     fail("NOT_FOUND", "Channel unavailable.");
   requirePermission(permissions, permission);
@@ -211,7 +219,11 @@ export async function conversationAccess(
       conversation.channelId,
       permission,
     );
-    return { conversation, permissions: access.permissions };
+    return {
+      conversation,
+      permissions: access.permissions,
+      archived: !!access.server.archivedAt,
+    };
   }
   if (
     conversation.dmUserLow !== actor.id &&
@@ -219,15 +231,26 @@ export async function conversationAccess(
   )
     fail("NOT_FOUND", "Conversation unavailable.");
   await pairLock(tx, conversation.dmUserLow!, conversation.dmUserHigh!);
-  const blocked = await blockedPair(
-    tx,
-    conversation.dmUserLow!,
-    conversation.dmUserHigh!,
-  );
+  const [peer] = await tx
+    .select({ disabledAt: s.appUsers.disabledAt })
+    .from(s.appUsers)
+    .where(
+      eq(
+        s.appUsers.id,
+        conversation.dmUserLow === actor.id
+          ? conversation.dmUserHigh!
+          : conversation.dmUserLow!,
+      ),
+    );
+  const blocked =
+    !peer ||
+    !!peer.disabledAt ||
+    (await blockedPair(tx, conversation.dmUserLow!, conversation.dmUserHigh!));
   if (permission !== P.VIEW_CHANNEL && blocked)
     fail("FORBIDDEN", "Messaging is unavailable for this conversation.");
   return {
     conversation,
+    archived: false,
     permissions: blocked
       ? P.VIEW_CHANNEL
       : P.VIEW_CHANNEL | P.SEND_MESSAGES | P.ADD_REACTIONS,
@@ -256,10 +279,13 @@ export async function visibleChannels(tx: Tx, actor: Actor, serverId: string) {
         )
     : [];
   return rows.flatMap((c) => {
-    const permissions = permissionsFor({
+    const effective = permissionsFor({
       ...access.input,
       overwrites: overwrites.filter((o) => o.channelId === c.id),
     });
+    const permissions = access.server.archivedAt
+      ? effective & P.VIEW_CHANNEL
+      : effective;
     return permissions & P.VIEW_CHANNEL
       ? [
           {

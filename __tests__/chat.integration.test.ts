@@ -726,6 +726,413 @@ describe.skipIf(!connectionString)("chat PostgreSQL integration", () => {
     expect((await owner.users.me())!.id).toBe(ownerId);
   });
 
+  async function lifecycleUser(label: string) {
+    const clerkId = `clerk_lifecycle_${randomUUID()}`;
+    const client = caller(clerkId);
+    const profile = await client.users.save({
+      handle: `life_${randomUUID().replaceAll("-", "").slice(0, 20)}`,
+      displayName: label,
+      bio: "Private profile details",
+    });
+    return { clerkId, client, profile };
+  }
+  async function deleteIdentity(clerkId: string, deliveryId = randomUUID()) {
+    await database.transaction((tx) =>
+      applyClerkEvent(
+        tx,
+        {
+          type: "user.deleted",
+          data: { id: clerkId, deleted: true, object: "user" },
+        } as WebhookEvent,
+        deliveryId,
+        new Date(),
+      ),
+    );
+  }
+  async function joinLifecycle(c: Caller, server: string, guest: Caller) {
+    const link = await c.invites.create({
+      serverId: server,
+      requestId: randomUUID(),
+      expiresInSeconds: 3600,
+      maxUses: null,
+    });
+    await guest.invites.accept({ token: link.token! });
+    return link;
+  }
+  async function makeAdmin(
+    c: Caller,
+    server: string,
+    userId: string,
+    position: number,
+  ) {
+    const role = await c.moderation.roleSave({
+      serverId: server,
+      name: "Admin",
+      position,
+      permissions: P.ADMINISTRATOR,
+    });
+    await c.moderation.roleAssign({
+      serverId: server,
+      userId,
+      roleId: role.id,
+      assigned: true,
+    });
+  }
+  it("erases account details, retains shared messages and chooses the highest-ranked active administrator", async () => {
+    const leaving = await lifecycleUser("Leaving owner");
+    const junior = await lifecycleUser("Junior admin");
+    const senior = await lifecycleUser("Senior admin");
+    const c = await leaving.client.servers.create({
+      name: "Continuing community",
+      requestId: randomUUID(),
+    });
+    await joinLifecycle(leaving.client, c.server.id, junior.client);
+    const oldInvite = await joinLifecycle(
+      leaving.client,
+      c.server.id,
+      senior.client,
+    );
+    await makeAdmin(leaving.client, c.server.id, junior.profile.id, 1);
+    await makeAdmin(leaving.client, c.server.id, senior.profile.id, 2);
+    const detail = await leaving.client.servers.get({ serverId: c.server.id });
+    const conversation = detail.channels.find(
+      (x) => x.kind === "text",
+    )!.conversationId!;
+    const message = await send(
+      leaving.client,
+      "Retained community history",
+      randomUUID(),
+      conversation,
+    );
+    await leaving.client.messages.react({
+      messageId: message.id,
+      emoji: "👍",
+      present: true,
+    });
+    await leaving.client.friends.request({ handle: junior.profile.handle });
+    await junior.client.friends.respond({
+      userId: leaving.profile.id,
+      action: "accept",
+    });
+    const dm = await junior.client.dm.open({ userId: leaving.profile.id });
+    await send(
+      leaving.client,
+      "Retained private conversation",
+      randomUUID(),
+      dm.id,
+    );
+    const before = await junior.client.messages.list({
+      conversationId: conversation,
+    });
+    await pool.query("insert into posts (name,created_by_id) values ($1,$2)", [
+      "Private post",
+      leaving.clerkId,
+    ]);
+    await pool.query(
+      "insert into jobs (user_id,title,description,due_date) values ($1,$2,$3,now())",
+      [leaving.clerkId, "Private job", "Private content"],
+    );
+    await deleteIdentity(leaving.clerkId);
+    const next = await senior.client.servers.get({ serverId: c.server.id });
+    expect(next.server.ownerId).toBe(senior.profile.id);
+    expect(next.server.archivedAt).toBeNull();
+    expect(next.members.map((m) => m.id)).not.toContain(leaving.profile.id);
+    const history = await senior.client.messages.list({
+      conversationId: conversation,
+    });
+    expect(history.items[0]).toMatchObject({
+      body: "Retained community history",
+      author: { displayName: "Deleted user", handle: "deleted_user", bio: "" },
+      reactions: [],
+    });
+    expect(
+      (await junior.client.messages.list({ conversationId: dm.id }))
+        .permissions,
+    ).toBe(P.VIEW_CHANNEL);
+    await expect(
+      send(junior.client, "Cannot contact a deleted user", randomUUID(), dm.id),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      junior.client.sync.delta({
+        conversationId: conversation,
+        after: before.eventSeq,
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect((await junior.client.friends.list()).friends).toEqual([]);
+    const [stored] = await database
+      .select()
+      .from(s.appUsers)
+      .where(eq(s.appUsers.id, leaving.profile.id));
+    expect(stored).toMatchObject({
+      displayName: "Deleted user",
+      bio: "",
+      status: "invisible",
+      clerkId: `deleted:${leaving.profile.id}`,
+    });
+    expect(stored!.handle).not.toBe(leaving.profile.handle);
+    expect(
+      (
+        await pool.query(
+          "select count(*)::int n from posts where created_by_id=$1",
+          [leaving.clerkId],
+        )
+      ).rows[0].n,
+    ).toBe(0);
+    expect(
+      (
+        await pool.query("select count(*)::int n from jobs where user_id=$1", [
+          leaving.clerkId,
+        ])
+      ).rows[0].n,
+    ).toBe(0);
+    await expect(leaving.client.users.me()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    await expect(
+      leaving.client.post.create({ name: "Stale session write" }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(leaving.client.post.getJobs()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    await expect(
+      leaving.client.storage.createUploadUrl({
+        fileName: "stale.txt",
+        contentType: "text/plain",
+      }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await outsider.users.save({
+      handle: leaving.profile.handle,
+      displayName: "Handle reclaimed",
+    });
+    await expect(
+      outsider.invites.preview({ token: oldInvite.token! }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await deleteIdentity(leaving.clerkId); // A second delivery cannot repeat transfer or erasure.
+    expect(
+      (await senior.client.servers.get({ serverId: c.server.id })).server
+        .ownerId,
+    ).toBe(senior.profile.id);
+  });
+  it("archives ownerless communities as read-only history and excludes them from the deletion purge", async () => {
+    const leaving = await lifecycleUser("Archive owner");
+    const reader = await lifecycleUser("Archive member");
+    const c = await leaving.client.servers.create({
+      name: "Archived community",
+      requestId: randomUUID(),
+    });
+    const invitation = await joinLifecycle(
+      leaving.client,
+      c.server.id,
+      reader.client,
+    );
+    const detail = await reader.client.servers.get({ serverId: c.server.id });
+    const conversation = detail.channels.find(
+      (x) => x.kind === "text",
+    )!.conversationId!;
+    const message = await send(
+      reader.client,
+      "Archive history",
+      randomUUID(),
+      conversation,
+    );
+    await deleteIdentity(leaving.clerkId);
+    const archive = await reader.client.servers.get({ serverId: c.server.id });
+    expect(archive.server.archivedAt).toBeInstanceOf(Date);
+    expect(archive.server.deletedAt).toBeNull();
+    expect(archive.members.map((m) => m.id)).toEqual([reader.profile.id]);
+    expect(
+      (await reader.client.messages.list({ conversationId: conversation }))
+        .permissions,
+    ).toBe(P.VIEW_CHANNEL);
+    for (const operation of [
+      () => send(reader.client, "No sends", randomUUID(), conversation),
+      () =>
+        reader.client.messages.edit({
+          messageId: message.id,
+          expectedVersion: message.version,
+          body: "No edits",
+        }),
+      () =>
+        reader.client.messages.delete({
+          messageId: message.id,
+          expectedVersion: message.version,
+        }),
+      () =>
+        reader.client.messages.react({
+          messageId: message.id,
+          emoji: "👍",
+          present: true,
+        }),
+      () =>
+        reader.client.servers.update({
+          serverId: c.server.id,
+          name: "No changes",
+        }),
+      () =>
+        reader.client.invites.create({
+          serverId: c.server.id,
+          requestId: randomUUID(),
+          expiresInSeconds: 3600,
+          maxUses: null,
+        }),
+    ])
+      await expect(operation()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      outsider.invites.accept({ token: invitation.token! }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(
+      (
+        await reader.client.search.messages({
+          conversationId: conversation,
+          query: "Archive",
+        })
+      ).items,
+    ).toHaveLength(1);
+    await pool.query(
+      "update servers set archived_at=now()-interval '30 days' where id=$1",
+      [c.server.id],
+    );
+    const maintenance = await readFile(
+      new URL("../src/server/chat/maintenance.sql", import.meta.url),
+      "utf8",
+    );
+    const connection = await pool.connect();
+    try {
+      await connection.query("begin");
+      await connection.query(maintenance);
+      await connection.query("commit");
+    } catch (error) {
+      await connection.query("rollback");
+      throw error;
+    } finally {
+      connection.release();
+    }
+    expect(
+      (await reader.client.messages.list({ conversationId: conversation }))
+        .items[0]!.body,
+    ).toBe("Archive history");
+    await reader.client.servers.leave({ serverId: c.server.id });
+    await expect(
+      reader.client.messages.list({ conversationId: conversation }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+  it("serializes concurrent owner/admin deletion without stranding a live community", async () => {
+    const a = await lifecycleUser("Concurrent owner");
+    const b = await lifecycleUser("Concurrent admin");
+    const reader = await lifecycleUser("Remaining member");
+    const c = await a.client.servers.create({
+      name: "Concurrent deletion",
+      requestId: randomUUID(),
+    });
+    await joinLifecycle(a.client, c.server.id, b.client);
+    await joinLifecycle(a.client, c.server.id, reader.client);
+    await makeAdmin(a.client, c.server.id, b.profile.id, 1);
+    await Promise.all([deleteIdentity(a.clerkId), deleteIdentity(b.clerkId)]);
+    const archived = await reader.client.servers.get({ serverId: c.server.id });
+    expect(archived.server.archivedAt).toBeInstanceOf(Date);
+    expect(archived.server.deletedAt).toBeNull();
+    expect(archived.members.map((m) => m.id)).toEqual([reader.profile.id]);
+    await expect(a.client.users.me()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    await expect(b.client.users.me()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+  });
+  it("rolls back erasure, ownership changes and webhook receipts together on failure", async () => {
+    const a = await lifecycleUser("Rollback owner");
+    const c = await a.client.servers.create({
+      name: "Retry deletion",
+      requestId: randomUUID(),
+    });
+    const deliveryId = randomUUID();
+    await expect(
+      database.transaction(async (tx) => {
+        await applyClerkEvent(
+          tx,
+          { type: "user.deleted", data: { id: a.clerkId } } as WebhookEvent,
+          deliveryId,
+          new Date(),
+        );
+        throw new Error("Injected failure after account erasure");
+      }),
+    ).rejects.toThrow("Injected failure");
+    expect((await a.client.users.me())!.displayName).toBe("Rollback owner");
+    expect(
+      (await a.client.servers.get({ serverId: c.server.id })).server.archivedAt,
+    ).toBeNull();
+    await deleteIdentity(a.clerkId, deliveryId);
+    await expect(a.client.users.me()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+  });
+
+  it("upgrades previously disabled profiles and archives their abandoned communities", async () => {
+    const legacySchema = `chat_legacy_${randomUUID().replaceAll("-", "")}`;
+    await pool.query(`create schema "${legacySchema}"`);
+    const legacy = new Pool({
+      connectionString,
+      options: `-c search_path=${legacySchema}`,
+      max: 1,
+    });
+    try {
+      const migrations = (await readdir(new URL("../drizzle", import.meta.url)))
+        .filter((f) => /^\d+.*\.sql$/.test(f))
+        .sort();
+      for (const file of migrations.filter((f) => !f.startsWith("0005_"))) {
+        const sql = await readFile(
+          new URL(`../drizzle/${file}`, import.meta.url),
+          "utf8",
+        );
+        await legacy.query(sql.replaceAll('"public".', `"${legacySchema}".`));
+      }
+      const user = (
+        await legacy.query(
+          "insert into app_users (clerk_id,handle,display_name,bio,disabled_at) values ('legacy_deleted','legacy_handle','Old private name','Old private bio',now()) returning id",
+        )
+      ).rows[0];
+      await legacy.query("begin");
+      const server = (
+        await legacy.query(
+          "insert into servers (owner_id,name) values ($1,'Legacy community') returning id",
+          [user.id],
+        )
+      ).rows[0];
+      await legacy.query(
+        "insert into server_members (server_id,user_id) values ($1,$2)",
+        [server.id, user.id],
+      );
+      await legacy.query("commit");
+      const upgrade = await readFile(
+        new URL(
+          `../drizzle/${migrations.find((f) => f.startsWith("0005_"))!}`,
+          import.meta.url,
+        ),
+        "utf8",
+      );
+      await legacy.query(upgrade.replaceAll('"public".', `"${legacySchema}".`));
+      expect(
+        (await legacy.query("select display_name,bio,clerk_id from app_users"))
+          .rows[0],
+      ).toEqual({
+        display_name: "Deleted user",
+        bio: "",
+        clerk_id: `deleted:${user.id}`,
+      });
+      expect(
+        (await legacy.query("select archived_at,deleted_at from servers"))
+          .rows[0],
+      ).toMatchObject({ archived_at: expect.any(Date), deleted_at: null });
+      expect(
+        (await legacy.query("select clerk_id from identity_revocations"))
+          .rows[0].clerk_id,
+      ).toBe("legacy_deleted");
+    } finally {
+      await legacy.end();
+      await pool.query(`drop schema "${legacySchema}" cascade`);
+    }
+  });
+
   it("purges expired deleted communities atomically while preserving recent data", async () => {
     const created = await newServer();
     const detail = await owner.servers.get({ serverId: created.server.id });

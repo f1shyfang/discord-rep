@@ -1,10 +1,11 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import { createTRPCRouter } from "~/server/api/trpc";
+import { identityProcedure } from "~/server/chat/procedure";
 import { getR2Storage, StorageNotConfiguredError } from "~/server/storage";
 import { StorageOwnershipError } from "~/server/storage/r2";
 
-const storageProcedure = protectedProcedure.use(async ({ next }) => {
+const storageProcedure = identityProcedure.use(async ({ next }) => {
   try {
     return await next({ ctx: { storage: getR2Storage() } });
   } catch (error) {

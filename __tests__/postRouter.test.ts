@@ -8,6 +8,10 @@ import { type db } from "~/server/db";
 import { postRouter } from "~/server/api/routers/post";
 
 vi.mock("~/server/db", () => ({ db: {} }));
+// Lifecycle rejection uses real SQL in chat.integration.test.ts; these tests isolate ownership.
+vi.mock("~/server/chat/procedure", async () => ({
+  identityProcedure: (await import("~/server/api/trpc")).protectedProcedure,
+}));
 vi.mock("~/libs/buildHelpers", () => ({
   userJobHelper: { insertJob: vi.fn(), getJobs: vi.fn() },
 }));

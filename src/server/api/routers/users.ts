@@ -44,6 +44,7 @@ export const usersRouter = createTRPCRouter({
         id: s.servers.id,
         name: s.servers.name,
         ownerId: s.servers.ownerId,
+        archivedAt: s.servers.archivedAt,
       })
       .from(s.servers)
       .innerJoin(s.serverMembers, eq(s.serverMembers.serverId, s.servers.id))

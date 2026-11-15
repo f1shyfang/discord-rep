@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { WebhookEvent } from "@clerk/nextjs/webhooks";
 import type { Tx } from "./core";
 import * as s from "~/server/db/chat-schema";
@@ -9,6 +9,12 @@ export async function assertIdentity(
   clerkId: string,
   sessionId?: string | null,
 ) {
+  // Ordinary transactions can run together. Deletion briefly takes this lock
+  // exclusively, so an in-flight write cannot restore erased profile state or
+  // transfer ownership to an identity being deleted.
+  await tx.execute(
+    sql`select pg_advisory_xact_lock_shared(hashtextextended('gather:identity-lifecycle', 0))`,
+  );
   const [identity] = await tx
     .select()
     .from(s.identityRevocations)
@@ -36,6 +42,11 @@ export async function applyClerkEvent(
   deliveryId: string,
   signedAt: Date,
 ) {
+  if (event.type === "user.deleted") {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended('gather:identity-lifecycle', 0))`,
+    );
+  }
   const inserted = await tx
     .insert(s.webhookReceipts)
     .values({ deliveryId, eventType: event.type, signedAt })
@@ -49,10 +60,7 @@ export async function applyClerkEvent(
       .insert(s.identityRevocations)
       .values({ clerkId: event.data.id })
       .onConflictDoNothing();
-    await tx
-      .update(s.appUsers)
-      .set({ disabledAt: new Date(), status: "invisible" })
-      .where(eq(s.appUsers.clerkId, event.data.id));
+    await tx.execute(sql`select delete_chat_account(${event.data.id})`);
   } else if (
     ["session.ended", "session.removed", "session.revoked"].includes(
       event.type,

@@ -33,6 +33,7 @@ export const invitesRouter = createTRPCRouter({
             and(
               eq(s.invites.tokenHash, tokenHash(input.token)),
               isNull(s.servers.deletedAt),
+              isNull(s.servers.archivedAt),
             ),
           );
         if (
@@ -116,7 +117,11 @@ export const invitesRouter = createTRPCRouter({
         .select()
         .from(s.servers)
         .where(
-          and(eq(s.servers.id, initial.serverId), isNull(s.servers.deletedAt)),
+          and(
+            eq(s.servers.id, initial.serverId),
+            isNull(s.servers.deletedAt),
+            isNull(s.servers.archivedAt),
+          ),
         )
         .for("update");
       if (!server) fail("NOT_FOUND", "Invite unavailable or expired.");

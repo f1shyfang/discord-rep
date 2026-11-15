@@ -340,6 +340,13 @@ export function Workspace({ profile }: { profile: Profile }) {
             </button>
           )}
         </header>
+        {detail.data?.server.archivedAt && (
+          <p className="error-notice" role="status">
+            Archived community. The owner deleted their account and no active
+            administrator could take over. Existing members can read the history
+            or leave through Server settings.
+          </p>
+        )}
         {!detailReady ? (
           <Empty
             title={

@@ -1,10 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import {
-  createTRPCRouter,
-  protectedProcedure,
-  publicProcedure,
-} from "~/server/api/trpc";
+import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { identityProcedure } from "~/server/chat/procedure";
 import { userJobHelper } from "~/libs/buildHelpers";
 import { posts } from "~/server/db/schema";
 
@@ -12,7 +9,7 @@ export const postRouter = createTRPCRouter({
   hello: publicProcedure
     .input(z.object({ text: z.string() }))
     .query(({ input }) => ({ greeting: `Hello ${input.text}` })),
-  create: protectedProcedure
+  create: identityProcedure
     .input(z.object({ name: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const [post] = await ctx.db
@@ -21,7 +18,7 @@ export const postRouter = createTRPCRouter({
         .returning();
       return post;
     }),
-  getLatest: protectedProcedure.query(async ({ ctx }) => {
+  getLatest: identityProcedure.query(async ({ ctx }) => {
     const [post] = await ctx.db
       .select()
       .from(posts)
@@ -30,13 +27,13 @@ export const postRouter = createTRPCRouter({
       .limit(1);
     return post ?? null;
   }),
-  getSecretMessage: protectedProcedure.query(
+  getSecretMessage: identityProcedure.query(
     () => "you can now see this secret message!",
   ),
-  createJob: protectedProcedure.mutation(({ ctx }) =>
+  createJob: identityProcedure.mutation(({ ctx }) =>
     userJobHelper.insertJob(ctx.userId),
   ),
-  getJobs: protectedProcedure.query(({ ctx }) =>
+  getJobs: identityProcedure.query(({ ctx }) =>
     userJobHelper.getJobs(ctx.userId),
   ),
 });
